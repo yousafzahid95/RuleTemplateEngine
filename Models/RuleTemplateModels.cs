@@ -7,6 +7,10 @@ namespace RuleTemplateEngine.Models
     /// </summary>
     public class RuleTemplate
     {
+        /// <summary>MongoDB document id (optional; set when loading from DB).</summary>
+        [JsonProperty("_id")]
+        public string? Id { get; set; }
+
         [JsonProperty("RuleName")]
         public string RuleName { get; set; } = string.Empty;
 
@@ -16,6 +20,7 @@ namespace RuleTemplateEngine.Models
         [JsonProperty("ActionItemTemplate")]
         public ActionItemTemplateDefinition ActionItemTemplate { get; set; } = new();
 
+        /// <summary>Data source definitions (e.g. LEM params). Stored under "Checks" in MongoDB.</summary>
         [JsonProperty("Checks")]
         public RuleChecks? Checks { get; set; }
     }
