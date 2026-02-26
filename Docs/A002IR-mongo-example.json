@@ -13,9 +13,10 @@
     "SourceSystem": 1,
     "ItemDefinitionId": 3,
     "Description": {
-      "template": "{0}",
+      "template": "Review {0} for project {1}",
       "params": [
-        ["Review and submit Partner Demographic IR for Review"]
+        ["[LEM.Name]", "[LEM.CategoryName]"],
+        ["[Event.ProjectId]"]
       ]
     },
     "EntityId": {

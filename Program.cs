@@ -55,8 +55,15 @@ static ActionItemTemplateDefinition BuildA002IrActionItemTemplate()
         ItemDefinitionId = 3,
         Description = new TemplateParam
         {
-            Template = "{0}",
-            Params = { new() { "Review and submit Partner Demographic IR for Review" } }
+            // Example: "Review {LEM.Name} for project {Event.ProjectId}"
+            Template = "Review {0} for project {1}",
+            Params = new List<List<string>>
+            {
+                // {0}: preferred display name from LEM (Name, fallback to CategoryName)
+                new() { "[LEM.Name]", "[LEM.CategoryName]" },
+                // {1}: project id from the event body (Event alias -> EventData/WorkplanTask/LemEvent)
+                new() { "[Event.ProjectId]" }
+            }
         },
         // EntityId resolved from LEM.EntityId
         EntityId = new TemplateParam
