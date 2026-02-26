@@ -1,0 +1,372 @@
+using RuleTemplateEngine;
+using RuleTemplateEngine.Dtos;
+using RuleTemplateEngine.Events;
+using RuleTemplateEngine.Interfaces;
+using RuleTemplateEngine.Models;
+using RuleTemplateEngine.Helpers;
+
+Console.WriteLine("══════════════════════════════════════════════════════");
+Console.WriteLine(" A002IR - LEM DataSource Parameter Resolution Tests");
+Console.WriteLine("══════════════════════════════════════════════════════\n");
+
+// Build A002IR-style LEM DataSource params (Filters.DataSources[\"LEM\"].params)
+var lemParams = BuildLemParamsForA002Ir();
+var actionItemTemplate = BuildA002IrActionItemTemplate();
+const string RuleName = "A002IR";
+
+await RunInfoRequestTestAsync(lemParams, actionItemTemplate, RuleName);
+await RunLemReplayTestAsync(lemParams, actionItemTemplate, RuleName);
+await RunExternalWorkplanTaskTestAsync(lemParams, actionItemTemplate, RuleName);
+await RunMultipleLemRecordsTestAsync(actionItemTemplate, RuleName);
+
+Console.WriteLine("\nAll tests completed.");
+
+// ----------------- Helpers -----------------
+
+static Dictionary<string, TemplateParam> BuildLemParamsForA002Ir()
+{
+    return new Dictionary<string, TemplateParam>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ProjectId"] = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[Event.ProjectId]" } }
+        },
+        ["WorkAreaId"] = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[Event.WorkareaId]", "[Event.WorkAreaId]" } }
+        },
+        ["EntityId"] = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[Event.EntityIds[0]]", "[Event.Entities[0].WorkAreaEntityId]", "[Event.EntityId]" } }
+        }
+    };
+}
+
+static ActionItemTemplateDefinition BuildA002IrActionItemTemplate()
+{
+    // Mirrors your A002IR ActionItemTemplate example, extended with dynamic
+    // EntityId / TaskId / SourceSystemKey resolution via the template engine.
+    return new ActionItemTemplateDefinition
+    {
+        SourceSystem = 1,
+        ItemDefinitionId = 3,
+        Description = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "Review and submit Partner Demographic IR for Review" } }
+        },
+        // EntityId resolved from LEM.EntityId
+        EntityId = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[LEM.EntityId]" } }
+        },
+        // TaskId also mapped from LEM.EntityId for demo purposes
+        TaskId = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[LEM.EntityId]" } }
+        },
+        // SourceSystemKey: demonstrates per-slot fallbacks via ParamGroups.
+        // {0} -> first non-empty of LEM.EntityId (only one here),
+        // {1} -> first non-empty of WorkAreaId fallbacks (only one here now, but could be extended).
+        SourceSystemKey = new TemplateParam
+        {
+            Template = "A002IR_{0}_{1}",
+            Params = new List<List<string>>
+            {
+                new() { "[LEM.EntityId]" },
+                new() { "[LEM.WorkAreaId]" }
+            }
+        }
+    };
+}
+
+static async Task RunInfoRequestTestAsync(
+    IDictionary<string, TemplateParam> lemParams,
+    ActionItemTemplateDefinition actionTemplate,
+    string ruleName)
+{
+    Console.WriteLine("Test 1: InfoRequestEvent with EventMessage + EventData (message envelope + body)\n");
+
+    var evt = new InfoRequestEvent
+    {
+        InfoRequest = new InfoRequestData
+        {
+            ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            WorkareaId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            EntityIds = new List<Guid> { Guid.Parse("33333333-3333-3333-3333-333333333333") }
+        }
+    };
+
+    var message = new ExternalGenericEntityEventMessage
+    {
+        MessageId = Guid.NewGuid(),
+        Label = "InfoRequest",
+        Timestamp = DateTime.UtcNow,
+        EventType = "InfoRequest",
+        Body = evt.InfoRequest
+    };
+
+    // Dataset: [EventMessage, EventData] so [EventMessage.MessageId], [EventData.ProjectId] / [Event.ProjectId] resolve
+    var datasetList = new List<IDataRecord>
+    {
+        TransformToIDataRecord<ExternalGenericEntityEventMessage>.TransformFromObject(message, "EventMessage").First(),
+        TransformToIDataRecord<InfoRequestData>.TransformFromObject(evt.InfoRequest, "EventData").First()
+    };
+
+    IDataSourceAdapter adapter = new LemDataSourceAdapter();
+    var records = (await adapter.GetRecordsAsync(evt, lemParams, datasetList, CancellationToken.None)).ToList();
+    datasetList.AddRange(records);
+
+    var lemRecord = records.First();
+    var keyedDataset = BuildKeyedDataset(datasetList);
+
+    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+
+    Console.WriteLine("Resolved LEM dummy record:");
+    foreach (var col in lemRecord.Columns)
+        Console.WriteLine($"  {col} = {lemRecord[col]}");
+
+    Console.WriteLine("\nResolved ActionItem:");
+    Console.WriteLine($"  EntityId        = {actionItem.EntityId}");
+    Console.WriteLine($"  WorkAreaId      = {actionItem.WorkAreaId}");
+    Console.WriteLine($"  TaskId          = {actionItem.TaskId}");
+    Console.WriteLine($"  SourceSystemKey = {actionItem.SourceSystemKey}");
+    Console.WriteLine($"  Description     = {actionItem.Description}");
+
+    Console.WriteLine();
+}
+
+static async Task RunLemReplayTestAsync(
+    IDictionary<string, TemplateParam> lemParams,
+    ActionItemTemplateDefinition actionTemplate,
+    string ruleName)
+{
+    Console.WriteLine("Test 2: SDTLemReplayEvent only\n");
+
+    var evt = new SDTLemReplayEvent
+    {
+        LemEvent = new LemEventData
+        {
+            ProjectId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
+            WorkareaId = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+            EntityId = Guid.Parse("66666666-6666-6666-6666-666666666666")
+        }
+    };
+
+    // Single list: event record first (prefix "Event")
+    var datasetList = new List<IDataRecord>
+    {
+        TransformToIDataRecord<LemEventData>.TransformFromObject(evt.LemEvent, "Event").First()
+    };
+
+    IDataSourceAdapter adapter = new LemDataSourceAdapter();
+    var records = (await adapter.GetRecordsAsync(evt, lemParams, datasetList, CancellationToken.None)).ToList();
+    datasetList.AddRange(records);
+
+    var lemRecord = records.First();
+    var keyedDataset = BuildKeyedDataset(datasetList);
+
+    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+
+    Console.WriteLine("Resolved LEM dummy record:");
+    foreach (var col in lemRecord.Columns)
+        Console.WriteLine($"  {col} = {lemRecord[col]}");
+
+    Console.WriteLine("\nResolved ActionItem:");
+    Console.WriteLine($"  EntityId        = {actionItem.EntityId}");
+    Console.WriteLine($"  WorkAreaId      = {actionItem.WorkAreaId}");
+    Console.WriteLine($"  TaskId          = {actionItem.TaskId}");
+    Console.WriteLine($"  SourceSystemKey = {actionItem.SourceSystemKey}");
+    Console.WriteLine($"  Description     = {actionItem.Description}");
+
+    Console.WriteLine();
+}
+
+static async Task RunExternalWorkplanTaskTestAsync(
+    IDictionary<string, TemplateParam> lemParams,
+    ActionItemTemplateDefinition actionTemplate,
+    string ruleName)
+{
+    Console.WriteLine("Test 3: ExternalWorkplanTaskEvent only\n");
+
+    var evt = new ExternalWorkplanTaskEvent
+    {
+        WorkplanTask = new WorkplanTaskData
+        {
+            ProjectId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+            WorkAreaId = Guid.Parse("88888888-8888-8888-8888-888888888888"),
+            TaskId = Guid.Parse("99999999-9999-9999-9999-999999999999"),
+            EntityId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            Entities = new List<WorkplanTaskEntity>
+            {
+                new WorkplanTaskEntity
+                {
+                    WorkAreaEntityId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                }
+            }
+        }
+    };
+
+    // Single list: event record first (prefix "Event")
+    var datasetList = new List<IDataRecord>
+    {
+        TransformToIDataRecord<WorkplanTaskData>.TransformFromObject(evt.WorkplanTask, "Event").First()
+    };
+
+    IDataSourceAdapter adapter = new LemDataSourceAdapter();
+    var records = (await adapter.GetRecordsAsync(evt, lemParams, datasetList, CancellationToken.None)).ToList();
+    datasetList.AddRange(records);
+
+    var lemRecord = records.First();
+    var keyedDataset = BuildKeyedDataset(datasetList);
+
+    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+
+    Console.WriteLine("Resolved LEM dummy record:");
+    foreach (var col in lemRecord.Columns)
+        Console.WriteLine($"  {col} = {lemRecord[col]}");
+
+    Console.WriteLine("\nResolved ActionItem:");
+    Console.WriteLine($"  EntityId        = {actionItem.EntityId}");
+    Console.WriteLine($"  WorkAreaId      = {actionItem.WorkAreaId}");
+    Console.WriteLine($"  TaskId          = {actionItem.TaskId}");
+    Console.WriteLine($"  SourceSystemKey = {actionItem.SourceSystemKey}");
+    Console.WriteLine($"  Description     = {actionItem.Description}");
+
+    Console.WriteLine();
+}
+
+static Task RunMultipleLemRecordsTestAsync(
+    ActionItemTemplateDefinition actionTemplate,
+    string ruleName)
+{
+    Console.WriteLine("Test 4: Multiple LEM records - [LEM.EntityId] vs [LEM[2].EntityId]\n");
+
+    var lemDtos = new List<EntityWorkAreaLevelDetailIntegrationDto>
+    {
+        new() { Id = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333") },
+        new() { Id = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("bbbbbbbb-3333-3333-3333-333333333333") },
+        new() { Id = Guid.Parse("cccccccc-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("cccccccc-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("cccccccc-3333-3333-3333-333333333333") }
+    };
+    var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
+
+    var templateDataset = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["LEM"] = lemRecords
+    };
+
+    // Resolve via RuleTemplateEngine only (single public API)
+    var firstEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
+        new TemplateParam { Template = "{0}", Params = { new() { "[LEM.EntityId]" } } },
+        templateDataset);
+    var firstByIndex = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
+        new TemplateParam { Template = "{0}", Params = { new() { "[LEM[0].EntityId]" } } },
+        templateDataset);
+    Console.WriteLine($"  [LEM.EntityId]     = {firstEntityId}");
+    Console.WriteLine($"  [LEM[0].EntityId]  = {firstByIndex}");
+
+    var thirdEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
+        new TemplateParam { Template = "{0}", Params = { new() { "[LEM[2].EntityId]" } } },
+        templateDataset);
+    Console.WriteLine($"  [LEM[2].EntityId]  = {thirdEntityId}");
+
+    // Action item using first LEM (default template)
+    var actionFromFirst = BuildActionItem(ruleName, actionTemplate, templateDataset, lemRecords[0]);
+    Console.WriteLine("\n  ActionItem from [LEM] / [LEM[0]]:");
+    Console.WriteLine($"    SourceSystemKey = {actionFromFirst.SourceSystemKey}");
+    Console.WriteLine($"    EntityId        = {actionFromFirst.EntityId}");
+
+    // Template that uses [LEM[2].EntityId] for SourceSystemKey
+    var templateUseThird = new ActionItemTemplateDefinition
+    {
+        SourceSystem = actionTemplate.SourceSystem,
+        ItemDefinitionId = actionTemplate.ItemDefinitionId,
+        Description = actionTemplate.Description,
+        EntityId = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[LEM[2].EntityId]" } }
+        },
+        TaskId = new TemplateParam
+        {
+            Template = "{0}",
+            Params = { new() { "[LEM[2].EntityId]" } }
+        },
+        SourceSystemKey = new TemplateParam
+        {
+            Template = "A002IR_{0}",
+            Params = { new() { "[LEM[2].EntityId]" } }
+        }
+    };
+    var actionFromThird = BuildActionItem(ruleName, templateUseThird, templateDataset, lemRecords[2]);
+    Console.WriteLine("\n  ActionItem from [LEM[2]]:");
+    Console.WriteLine($"    SourceSystemKey = {actionFromThird.SourceSystemKey}");
+    Console.WriteLine($"    EntityId        = {actionFromThird.EntityId}");
+
+    Console.WriteLine();
+    return Task.CompletedTask;
+}
+
+/// <summary>
+/// Builds keyed dataset from the full list (after LEM records appended).
+/// Convention: 3+ items = [0]=EventMessage, [1]=EventData, [2+]=LEM; otherwise [0]=Event, [1+]=LEM.
+/// </summary>
+static Dictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(List<IDataRecord> datasetList)
+{
+    var keyed = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
+    if (datasetList.Count == 0) return keyed;
+    if (datasetList.Count >= 3)
+    {
+        keyed["EventMessage"] = new List<IDataRecord> { datasetList[0] };
+        keyed["EventData"] = new List<IDataRecord> { datasetList[1] };
+        keyed["Event"] = new List<IDataRecord> { datasetList[1] };
+        keyed["LEM"] = datasetList.Skip(2).ToList();
+    }
+    else
+    {
+        keyed["Event"] = new List<IDataRecord> { datasetList[0] };
+        keyed["LEM"] = datasetList.Skip(1).ToList();
+    }
+    return keyed;
+}
+
+static ActionItem BuildActionItem(
+    string ruleName,
+    ActionItemTemplateDefinition template,
+    IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset,
+    IDataRecord lemRecord)
+{
+    var description = template.Description != null
+        ? RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(template.Description, dataset)
+        : string.Empty;
+
+    var entityIdStr = template.EntityId != null
+        ? RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(template.EntityId, dataset)
+        : string.Empty;
+
+    var taskIdStr = template.TaskId != null
+        ? RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(template.TaskId, dataset)
+        : string.Empty;
+
+    var sourceKey = template.SourceSystemKey != null
+        ? RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(template.SourceSystemKey, dataset)
+        : string.Empty;
+
+    var workAreaIdVal = lemRecord["WorkAreaId"];
+    var actionItem = new ActionItem
+    {
+        EntityId = Guid.TryParse(entityIdStr, out var eid) ? eid : Guid.Empty,
+        WorkAreaId = workAreaIdVal != null && Guid.TryParse(workAreaIdVal.ToString(), out var waid) ? waid : Guid.Empty,
+        TaskId = Guid.TryParse(taskIdStr, out var tid) ? tid : Guid.Empty,
+        SourceSystemKey = sourceKey,
+        Description = description,
+        Status = "Open"
+    };
+
+    return actionItem;
+}
