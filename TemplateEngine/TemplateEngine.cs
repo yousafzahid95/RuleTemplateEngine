@@ -13,8 +13,8 @@ namespace RuleTemplateEngine.TemplateEngine
         /// <summary>
         /// Resolves a TemplateParam by resolving each param expression against the dataset,
         /// then calling String.Format(template, ...values).
-        /// Params is interpreted as grouped fallbacks: Params[0] -> {0}, Params[1] -> {1}, etc.
-        /// Each group is evaluated with first-non-empty semantics.
+        /// params[0] -> {0}, params[1] -> {1}, etc.
+        /// Special case: template "{0}" with multiple params uses first non-empty (fallback).
         /// </summary>
         public static string Resolve(TemplateParam param, IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset)
         {
@@ -24,32 +24,21 @@ namespace RuleTemplateEngine.TemplateEngine
             if (param.Params == null || param.Params.Count == 0)
                 return param.Template;
 
-            var slotValues = new List<object?>(param.Params.Count);
+            var rawValues = new object?[param.Params.Count];
+            for (var i = 0; i < param.Params.Count; i++)
+                rawValues[i] = ExpressionResolver.Resolve(param.Params[i], dataset);
 
-            foreach (var group in param.Params)
+            // Special case: single placeholder with multiple params -> first non-empty fallback
+            if (string.Equals(param.Template, "{0}", StringComparison.Ordinal) && param.Params.Count > 1)
             {
-                object? chosen = null;
-
-                if (group != null)
-                {
-                    foreach (var expr in group)
-                    {
-                        if (string.IsNullOrWhiteSpace(expr))
-                            continue;
-
-                        var value = ExpressionResolver.Resolve(expr, dataset);
-                        if (value != null && !string.IsNullOrWhiteSpace(value.ToString()))
-                        {
-                            chosen = value;
-                            break;
-                        }
-                    }
-                }
-
-                slotValues.Add(chosen);
+                var firstNonEmpty = rawValues.FirstOrDefault(v =>
+                    v != null && !string.IsNullOrWhiteSpace(v?.ToString()));
+                if (firstNonEmpty == null)
+                    return string.Empty;
+                return string.Format(param.Template, firstNonEmpty);
             }
 
-            return FormatSafely(param.Template, slotValues);
+            return FormatSafely(param.Template, rawValues);
         }
 
         private static string FormatSafely(string template, IReadOnlyList<object?> values)

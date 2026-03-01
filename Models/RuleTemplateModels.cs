@@ -50,12 +50,10 @@ namespace RuleTemplateEngine.Models
     }
 
     /// <summary>
-    /// A single template: format string (e.g. "{0}") and param expressions (e.g. "[AllWorkplan.TaskId]").
+    /// A single template: format string (e.g. "{0}", "Review {0} for project {1}") and param expressions.
     /// Resolved via String.Format(template, ...resolvedParams).
-    /// Params is a list of lists:
-    /// - Params[0] is the fallback list for {0}
-    /// - Params[1] is the fallback list for {1}
-    /// Each inner list is evaluated with first-non-empty semantics.
+    /// Params is a flat list: params[0] populates {0}, params[1] populates {1}, etc.
+    /// Special case: template "{0}" with multiple params uses first non-empty value (fallback).
     /// </summary>
     public class TemplateParam
     {
@@ -63,11 +61,10 @@ namespace RuleTemplateEngine.Models
         public string Template { get; set; } = string.Empty;
 
         /// <summary>
-        /// Grouped params: each inner list represents the fallbacks for a single slot
-        /// (e.g. Params[0] -> {0}, Params[1] -> {1}, each group using first-non-empty semantics).
+        /// Flat list: params[0] -> {0}, params[1] -> {1}, etc. Each expression is resolved against the dataset.
         /// </summary>
         [JsonProperty("params")]
-        public List<List<string>> Params { get; set; } = new();
+        public List<string> Params { get; set; } = new();
     }
 
     /// <summary>

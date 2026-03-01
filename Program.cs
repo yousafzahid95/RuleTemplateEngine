@@ -30,17 +30,17 @@ static Dictionary<string, TemplateParam> BuildLemParamsForA002Ir()
         ["ProjectId"] = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[Event.ProjectId]" } }
+            Params = { "[Event.ProjectId]" }
         },
         ["WorkAreaId"] = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[Event.WorkareaId]", "[Event.WorkAreaId]" } }
+            Params = { "[Event.WorkareaId]", "[Event.WorkAreaId]" }
         },
         ["EntityId"] = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[Event.EntityIds[0]]", "[Event.Entities[0].WorkAreaEntityId]", "[Event.EntityId]" } }
+            Params = { "[Event.EntityIds[0]]", "[Event.Entities[0].WorkAreaEntityId]", "[Event.EntityId]" }
         }
     };
 }
@@ -55,39 +55,23 @@ static ActionItemTemplateDefinition BuildA002IrActionItemTemplate()
         ItemDefinitionId = 3,
         Description = new TemplateParam
         {
-            // Example: "Review {LEM.Name} for project {Event.ProjectId}"
             Template = "Review {0} for project {1}",
-            Params = new List<List<string>>
-            {
-                // {0}: preferred display name from LEM (Name, fallback to CategoryName)
-                new() { "[LEM.Name]", "[LEM.CategoryName]" },
-                // {1}: project id from the event body (Event alias -> EventData/WorkplanTask/LemEvent)
-                new() { "[Event.ProjectId]" }
-            }
+            Params = { "[LEM.Name]", "[Event.ProjectId]" }
         },
-        // EntityId resolved from LEM.EntityId
         EntityId = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[LEM.EntityId]" } }
+            Params = { "[LEM.EntityId]" }
         },
-        // TaskId also mapped from LEM.EntityId for demo purposes
         TaskId = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[LEM.EntityId]" } }
+            Params = { "[LEM.EntityId]" }
         },
-        // SourceSystemKey: demonstrates per-slot fallbacks via ParamGroups.
-        // {0} -> first non-empty of LEM.EntityId (only one here),
-        // {1} -> first non-empty of WorkAreaId fallbacks (only one here now, but could be extended).
         SourceSystemKey = new TemplateParam
         {
             Template = "A002IR_{0}_{1}",
-            Params = new List<List<string>>
-            {
-                new() { "[LEM.EntityId]" },
-                new() { "[LEM.WorkAreaId]" }
-            }
+            Params = { "[LEM.EntityId]", "[LEM.WorkAreaId]" }
         }
     };
 }
@@ -269,16 +253,16 @@ static Task RunMultipleLemRecordsTestAsync(
 
     // Resolve via RuleTemplateEngine only (single public API)
     var firstEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
-        new TemplateParam { Template = "{0}", Params = { new() { "[LEM.EntityId]" } } },
+        new TemplateParam { Template = "{0}", Params = { "[LEM.EntityId]" } },
         templateDataset);
     var firstByIndex = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
-        new TemplateParam { Template = "{0}", Params = { new() { "[LEM[0].EntityId]" } } },
+        new TemplateParam { Template = "{0}", Params = { "[LEM[0].EntityId]" } },
         templateDataset);
     Console.WriteLine($"  [LEM.EntityId]     = {firstEntityId}");
     Console.WriteLine($"  [LEM[0].EntityId]  = {firstByIndex}");
 
     var thirdEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
-        new TemplateParam { Template = "{0}", Params = { new() { "[LEM[2].EntityId]" } } },
+        new TemplateParam { Template = "{0}", Params = { "[LEM[2].EntityId]" } },
         templateDataset);
     Console.WriteLine($"  [LEM[2].EntityId]  = {thirdEntityId}");
 
@@ -297,17 +281,17 @@ static Task RunMultipleLemRecordsTestAsync(
         EntityId = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[LEM[2].EntityId]" } }
+            Params = { "[LEM[2].EntityId]" }
         },
         TaskId = new TemplateParam
         {
             Template = "{0}",
-            Params = { new() { "[LEM[2].EntityId]" } }
+            Params = { "[LEM[2].EntityId]" }
         },
         SourceSystemKey = new TemplateParam
         {
             Template = "A002IR_{0}",
-            Params = { new() { "[LEM[2].EntityId]" } }
+            Params = { "[LEM[2].EntityId]" }
         }
     };
     var actionFromThird = BuildActionItem(ruleName, templateUseThird, templateDataset, lemRecords[2]);

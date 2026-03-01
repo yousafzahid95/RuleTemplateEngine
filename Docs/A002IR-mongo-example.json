@@ -15,27 +15,27 @@
     "Description": {
       "template": "Review {0} for project {1}",
       "params": [
-        ["[LEM.Name]", "[LEM.CategoryName]"],
-        ["[Event.ProjectId]"]
+        "[LEM.Name]",
+        "[Event.ProjectId]"
       ]
     },
     "EntityId": {
       "template": "{0}",
       "params": [
-        ["[LEM.EntityId]"]
+        "[LEM.EntityId]"
       ]
     },
     "TaskId": {
       "template": "{0}",
       "params": [
-        ["[LEM.EntityId]"]
+        "[LEM.EntityId]"
       ]
     },
     "SourceSystemKey": {
       "template": "A002IR_{0}_{1}",
       "params": [
-        ["[LEM.EntityId]"],
-        ["[LEM.WorkAreaId]"]
+        "[LEM.EntityId]",
+        "[LEM.WorkAreaId]"
       ]
     }
   },
@@ -47,19 +47,25 @@
           "ProjectId": {
             "template": "{0}",
             "params": [
-              ["[InfoRequest.ProjectId]", "[LemEvent.ProjectId]", "[WorkplanTask.ProjectId]"]
+              "[InfoRequest.ProjectId]",
+              "[LemEvent.ProjectId]",
+              "[WorkplanTask.ProjectId]"
             ]
           },
           "WorkAreaId": {
             "template": "{0}",
             "params": [
-              ["[InfoRequest.WorkareaId]", "[LemEvent.WorkareaId]", "[WorkplanTask.WorkAreaId]"]
+              "[InfoRequest.WorkareaId]",
+              "[LemEvent.WorkareaId]",
+              "[WorkplanTask.WorkAreaId]"
             ]
           },
           "EntityId": {
             "template": "{0}",
             "params": [
-              ["[InfoRequest.EntityIds[0]]", "[LemEvent.EntityId]", "[WorkplanTask.Entities[0].WorkAreaEntityId]"]
+              "[InfoRequest.EntityIds[0]]",
+              "[LemEvent.EntityId]",
+              "[WorkplanTask.Entities[0].WorkAreaEntityId]"
             ]
           }
         }
@@ -70,7 +76,7 @@
           "Task1065Name": {
             "template": "{0}",
             "params": [
-              ["1065 U.S. Pship Income TR"]
+              "1065 U.S. Pship Income TR"
             ]
           }
         }
