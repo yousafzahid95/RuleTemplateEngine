@@ -4,9 +4,9 @@ using RuleTemplateEngine.Models;
 namespace RuleTemplateEngine.TemplateEngine
 {
     /// <summary>
-    /// Resolves a TemplateParam against a dataset keyed by DataSourceKey.
-    /// Any key present in the dataset is supported: LEM, EventMessage, EventData, Event, or custom keys.
-    /// Uses String.Format and bracket expressions like [LEM.Property], [EventMessage.MessageId], [EventData.ProjectId], or [SourceKey[index].Property].
+    /// Resolves a TemplateParam against a dataset (list of records). Keys are derived from each record's
+    /// column names (e.g. CustomDataRecord built with prefix "LEM" has columns "LEM.EntityId") — no position-based keying.
+    /// Uses String.Format and bracket expressions like [LEM.Property], [Event.ProjectId], or [LEM[index].Property].
     /// </summary>
     public static class RuleTemplateEngine
     {
@@ -16,7 +16,9 @@ namespace RuleTemplateEngine.TemplateEngine
         /// params[0] -> {0}, params[1] -> {1}, etc.
         /// Special case: template "{0}" with multiple params uses first non-empty (fallback).
         /// </summary>
-        public static string Resolve(TemplateParam param, IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset)
+        /// <param name="param">Template and param expressions.</param>
+        /// <param name="dataset">List of records. Each record's key (e.g. LEM, Event) is taken from its column names (prefix used in CustomDataRecord transformation).</param>
+        public static string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset)
         {
             if (param == null || string.IsNullOrEmpty(param.Template))
                 return string.Empty;
@@ -24,9 +26,10 @@ namespace RuleTemplateEngine.TemplateEngine
             if (param.Params == null || param.Params.Count == 0)
                 return param.Template;
 
+            var keyed = BuildKeyedDataset(dataset);
             var rawValues = new object?[param.Params.Count];
             for (var i = 0; i < param.Params.Count; i++)
-                rawValues[i] = ExpressionResolver.Resolve(param.Params[i], dataset);
+                rawValues[i] = ExpressionResolver.Resolve(param.Params[i], keyed);
 
             // Special case: single placeholder with multiple params -> first non-empty fallback
             if (string.Equals(param.Template, "{0}", StringComparison.Ordinal) && param.Params.Count > 1)
@@ -39,6 +42,46 @@ namespace RuleTemplateEngine.TemplateEngine
             }
 
             return FormatSafely(param.Template, rawValues);
+        }
+
+        /// <summary>
+        /// Builds keyed dataset by grouping records by the key already in their column names.
+        /// E.g. a record with columns "LEM.EntityId", "LEM.WorkAreaId" is grouped under "LEM"; "[Event.ProjectId]" under "Event".
+        /// </summary>
+        internal static IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(IReadOnlyList<IDataRecord> datasetList)
+        {
+            var keyed = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
+            if (datasetList == null || datasetList.Count == 0) return keyed;
+
+            foreach (var record in datasetList)
+            {
+                var key = GetDataSourceKeyFromRecord(record);
+                if (string.IsNullOrEmpty(key))
+                    continue;
+                if (!keyed.TryGetValue(key, out var list))
+                {
+                    list = new List<IDataRecord>();
+                    keyed[key] = list;
+                }
+                ((List<IDataRecord>)list).Add(record);
+            }
+            return keyed;
+        }
+
+        /// <summary>
+        /// Infers the data source key from a record's columns (first segment before '.' e.g. "LEM.EntityId" -> "LEM").
+        /// </summary>
+        private static string? GetDataSourceKeyFromRecord(IDataRecord record)
+        {
+            if (record?.Columns == null || record.Columns.Length == 0)
+                return null;
+            foreach (var col in record.Columns)
+            {
+                var dot = col.IndexOf('.');
+                if (dot > 0)
+                    return col[..dot];
+            }
+            return null;
         }
 
         private static string FormatSafely(string template, IReadOnlyList<object?> values)

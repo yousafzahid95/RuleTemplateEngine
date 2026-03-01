@@ -102,11 +102,11 @@ static async Task RunInfoRequestTestAsync(
         Body = evt.InfoRequest
     };
 
-    // Dataset: [EventMessage, EventData] so [EventMessage.MessageId], [EventData.ProjectId] / [Event.ProjectId] resolve
+    // Dataset: EventMessage = message envelope, Event = event body (keys match rule expressions [EventMessage.xxx], [Event.xxx])
     var datasetList = new List<IDataRecord>
     {
         TransformToIDataRecord<ExternalGenericEntityEventMessage>.TransformFromObject(message, "EventMessage").First(),
-        TransformToIDataRecord<InfoRequestData>.TransformFromObject(evt.InfoRequest, "EventData").First()
+        TransformToIDataRecord<InfoRequestData>.TransformFromObject(evt.InfoRequest, "Event").First()
     };
 
     IDataSourceAdapter adapter = new LemDataSourceAdapter();
@@ -114,9 +114,8 @@ static async Task RunInfoRequestTestAsync(
     datasetList.AddRange(records);
 
     var lemRecord = records.First();
-    var keyedDataset = BuildKeyedDataset(datasetList);
 
-    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+    var actionItem = BuildActionItem(ruleName, actionTemplate, datasetList, lemRecord);
 
     Console.WriteLine("Resolved LEM dummy record:");
     foreach (var col in lemRecord.Columns)
@@ -160,9 +159,8 @@ static async Task RunLemReplayTestAsync(
     datasetList.AddRange(records);
 
     var lemRecord = records.First();
-    var keyedDataset = BuildKeyedDataset(datasetList);
 
-    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+    var actionItem = BuildActionItem(ruleName, actionTemplate, datasetList, lemRecord);
 
     Console.WriteLine("Resolved LEM dummy record:");
     foreach (var col in lemRecord.Columns)
@@ -214,9 +212,8 @@ static async Task RunExternalWorkplanTaskTestAsync(
     datasetList.AddRange(records);
 
     var lemRecord = records.First();
-    var keyedDataset = BuildKeyedDataset(datasetList);
 
-    var actionItem = BuildActionItem(ruleName, actionTemplate, keyedDataset, lemRecord);
+    var actionItem = BuildActionItem(ruleName, actionTemplate, datasetList, lemRecord);
 
     Console.WriteLine("Resolved LEM dummy record:");
     foreach (var col in lemRecord.Columns)
@@ -246,28 +243,26 @@ static Task RunMultipleLemRecordsTestAsync(
     };
     var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
 
-    var templateDataset = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["LEM"] = lemRecords
-    };
+    // Keys come from record column names (e.g. "LEM.EntityId" -> LEM). So just pass the 3 LEM records.
+    var datasetList = new List<IDataRecord>(lemRecords);
 
     // Resolve via RuleTemplateEngine only (single public API)
     var firstEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
         new TemplateParam { Template = "{0}", Params = { "[LEM.EntityId]" } },
-        templateDataset);
+        datasetList);
     var firstByIndex = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
         new TemplateParam { Template = "{0}", Params = { "[LEM[0].EntityId]" } },
-        templateDataset);
+        datasetList);
     Console.WriteLine($"  [LEM.EntityId]     = {firstEntityId}");
     Console.WriteLine($"  [LEM[0].EntityId]  = {firstByIndex}");
 
     var thirdEntityId = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(
         new TemplateParam { Template = "{0}", Params = { "[LEM[2].EntityId]" } },
-        templateDataset);
+        datasetList);
     Console.WriteLine($"  [LEM[2].EntityId]  = {thirdEntityId}");
 
     // Action item using first LEM (default template)
-    var actionFromFirst = BuildActionItem(ruleName, actionTemplate, templateDataset, lemRecords[0]);
+    var actionFromFirst = BuildActionItem(ruleName, actionTemplate, datasetList, lemRecords[0]);
     Console.WriteLine("\n  ActionItem from [LEM] / [LEM[0]]:");
     Console.WriteLine($"    SourceSystemKey = {actionFromFirst.SourceSystemKey}");
     Console.WriteLine($"    EntityId        = {actionFromFirst.EntityId}");
@@ -294,7 +289,7 @@ static Task RunMultipleLemRecordsTestAsync(
             Params = { "[LEM[2].EntityId]" }
         }
     };
-    var actionFromThird = BuildActionItem(ruleName, templateUseThird, templateDataset, lemRecords[2]);
+    var actionFromThird = BuildActionItem(ruleName, templateUseThird, datasetList, lemRecords[2]);
     Console.WriteLine("\n  ActionItem from [LEM[2]]:");
     Console.WriteLine($"    SourceSystemKey = {actionFromThird.SourceSystemKey}");
     Console.WriteLine($"    EntityId        = {actionFromThird.EntityId}");
@@ -303,33 +298,10 @@ static Task RunMultipleLemRecordsTestAsync(
     return Task.CompletedTask;
 }
 
-/// <summary>
-/// Builds keyed dataset from the full list (after LEM records appended).
-/// Convention: 3+ items = [0]=EventMessage, [1]=EventData, [2+]=LEM; otherwise [0]=Event, [1+]=LEM.
-/// </summary>
-static Dictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(List<IDataRecord> datasetList)
-{
-    var keyed = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
-    if (datasetList.Count == 0) return keyed;
-    if (datasetList.Count >= 3)
-    {
-        keyed["EventMessage"] = new List<IDataRecord> { datasetList[0] };
-        keyed["EventData"] = new List<IDataRecord> { datasetList[1] };
-        keyed["Event"] = new List<IDataRecord> { datasetList[1] };
-        keyed["LEM"] = datasetList.Skip(2).ToList();
-    }
-    else
-    {
-        keyed["Event"] = new List<IDataRecord> { datasetList[0] };
-        keyed["LEM"] = datasetList.Skip(1).ToList();
-    }
-    return keyed;
-}
-
 static ActionItem BuildActionItem(
     string ruleName,
     ActionItemTemplateDefinition template,
-    IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset,
+    IReadOnlyList<IDataRecord> dataset,
     IDataRecord lemRecord)
 {
     var description = template.Description != null

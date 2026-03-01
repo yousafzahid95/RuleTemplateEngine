@@ -14,41 +14,13 @@ namespace RuleTemplateEngine
         /// - 1 record: dataset[0] = event body only → keyed as "Event" ([Event.ProjectId] etc.).
         /// - 2+ records: dataset[0] = EventMessage (message envelope), dataset[1] = EventData (Body) → keyed as "EventMessage" and "EventData"; "Event" is an alias for EventData for backward compatibility.
         /// LEM records are returned by the adapter; the caller appends them to the same list.
+        /// Resolve uses only this list (keys are derived from position inside the engine).
         /// </remarks>
         public async Task<IEnumerable<IDataRecord>> GetRecordsAsync(
             object eventData,
             IDictionary<string, TemplateParam> dataSourceParams,
             IReadOnlyList<IDataRecord> dataset,
             CancellationToken cancellationToken = default)
-        {
-            var keyedDataset = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
-            if (dataset.Count == 0)
-            {
-                // No-op
-            }
-            else if (dataset.Count >= 2)
-            {
-                keyedDataset["EventMessage"] = new List<IDataRecord> { dataset[0] };
-                keyedDataset["EventData"] = new List<IDataRecord> { dataset[1] };
-                keyedDataset["Event"] = new List<IDataRecord> { dataset[1] };
-            }
-            else
-            {
-                keyedDataset["Event"] = new List<IDataRecord> { dataset[0] };
-            }
-
-            return await GetRecordsAsync(eventData, dataSourceParams, keyedDataset, cancellationToken).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// Uses rule-based template params and the dataset (keyed by DataSourceKey) to resolve ProjectId / WorkAreaId / EntityId,
-        /// then returns LEM records via TransformToIDataRecord from the API response.
-        /// </summary>
-        public async Task<IEnumerable<IDataRecord>> GetRecordsAsync(
-            object eventData,
-            IDictionary<string, TemplateParam> dataSourceParams,
-            IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset,
-            CancellationToken cancellationToken)
         {
             Console.WriteLine($"DataSource adapter {nameof(LemDataSourceAdapter)} execution starts.");
 
@@ -78,7 +50,7 @@ namespace RuleTemplateEngine
         private static Guid ResolveGuidParam(
             string key,
             IDictionary<string, TemplateParam> dataSourceParams,
-            IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset)
+            IReadOnlyList<IDataRecord> dataset)
         {
             if (!dataSourceParams.TryGetValue(key, out var templateParam))
                 return Guid.Empty;
