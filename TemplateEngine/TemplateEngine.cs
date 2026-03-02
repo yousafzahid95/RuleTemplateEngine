@@ -11,12 +11,11 @@ namespace RuleTemplateEngine.TemplateEngine
     public static class RuleTemplateEngine
     {
         /// <summary>
-        /// Resolves a TemplateParam by resolving each param expression against the dataset,
-        /// then calling String.Format(template, ...values).
-        /// params[0] -> {0}, params[1] -> {1}, etc.
-        /// Special case: template "{0}" with multiple params uses first non-empty (fallback).
+        /// Resolves a TemplateParam (2D params) against the dataset.
+        /// Params[i] is a list of fallback expressions for placeholder {i}.
+        /// For each placeholder, expressions are tried in order; first non-empty value wins.
         /// </summary>
-        /// <param name="param">Template and param expressions.</param>
+        /// <param name="param">Template and 2D param expressions.</param>
         /// <param name="dataset">List of records. Each record's key (e.g. LEM, Event) is taken from its column names (prefix used in CustomDataRecord transformation).</param>
         public static string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset)
         {
@@ -28,17 +27,26 @@ namespace RuleTemplateEngine.TemplateEngine
 
             var keyed = BuildKeyedDataset(dataset);
             var rawValues = new object?[param.Params.Count];
-            for (var i = 0; i < param.Params.Count; i++)
-                rawValues[i] = ExpressionResolver.Resolve(param.Params[i], keyed);
 
-            // Special case: single placeholder with multiple params -> first non-empty fallback
-            if (string.Equals(param.Template, "{0}", StringComparison.Ordinal) && param.Params.Count > 1)
+            for (var i = 0; i < param.Params.Count; i++)
             {
-                var firstNonEmpty = rawValues.FirstOrDefault(v =>
-                    v != null && !string.IsNullOrWhiteSpace(v?.ToString()));
-                if (firstNonEmpty == null)
-                    return string.Empty;
-                return string.Format(param.Template, firstNonEmpty);
+                var candidates = param.Params[i];
+                if (candidates == null || candidates.Count == 0)
+                {
+                    rawValues[i] = null;
+                    continue;
+                }
+
+                // Try each candidate expression; first non-empty wins
+                foreach (var expr in candidates)
+                {
+                    var resolved = ExpressionResolver.Resolve(expr, keyed);
+                    if (resolved != null && !string.IsNullOrWhiteSpace(resolved.ToString()))
+                    {
+                        rawValues[i] = resolved;
+                        break;
+                    }
+                }
             }
 
             return FormatSafely(param.Template, rawValues);
@@ -82,46 +90,6 @@ namespace RuleTemplateEngine.TemplateEngine
                     return col[..dot];
             }
             return null;
-        }
-
-        /// <summary>
-        /// V2: Resolves a TemplateParamV2 (2D params) against the dataset.
-        /// Params[i] is a list of fallback expressions for placeholder {i}.
-        /// For each placeholder, expressions are tried in order; first non-empty value wins.
-        /// </summary>
-        public static string ResolveV2(TemplateParamV2 param, IReadOnlyList<IDataRecord> dataset)
-        {
-            if (param == null || string.IsNullOrEmpty(param.Template))
-                return string.Empty;
-
-            if (param.Params == null || param.Params.Count == 0)
-                return param.Template;
-
-            var keyed = BuildKeyedDataset(dataset);
-            var rawValues = new object?[param.Params.Count];
-
-            for (var i = 0; i < param.Params.Count; i++)
-            {
-                var candidates = param.Params[i];
-                if (candidates == null || candidates.Count == 0)
-                {
-                    rawValues[i] = null;
-                    continue;
-                }
-
-                // Try each candidate expression; first non-empty wins
-                foreach (var expr in candidates)
-                {
-                    var resolved = ExpressionResolver.Resolve(expr, keyed);
-                    if (resolved != null && !string.IsNullOrWhiteSpace(resolved.ToString()))
-                    {
-                        rawValues[i] = resolved;
-                        break;
-                    }
-                }
-            }
-
-            return FormatSafely(param.Template, rawValues);
         }
 
         private static string FormatSafely(string template, IReadOnlyList<object?> values)

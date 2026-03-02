@@ -50,28 +50,12 @@ namespace RuleTemplateEngine.Models
     }
 
     /// <summary>
-    /// V1 (flat): format string + flat param list.
-    /// params[0] -> {0}, params[1] -> {1}, etc.
-    /// Special case: template "{0}" with multiple params uses first non-empty value (fallback).
+    /// A single template: format string (e.g. "{0}", "Review {0} for project {1}") and 2D param expressions.
+    /// Params[i] is a list of fallback expressions for placeholder {i}.
+    /// For each placeholder, expressions are tried in order; the first non-empty resolved value wins.
+    /// Resolved via String.Format(template, ...resolvedParams).
     /// </summary>
     public class TemplateParam
-    {
-        [JsonProperty("template")]
-        public string Template { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Flat list: params[0] -> {0}, params[1] -> {1}, etc. Each expression is resolved against the dataset.
-        /// </summary>
-        [JsonProperty("params")]
-        public List<string> Params { get; set; } = new();
-    }
-
-    /// <summary>
-    /// V2 (2D): format string + 2D param list.
-    /// Params[i] is a list of fallback expressions for placeholder {i}.
-    /// For each placeholder, the first non-empty resolved value wins.
-    /// </summary>
-    public class TemplateParamV2
     {
         [JsonProperty("template")]
         public string Template { get; set; } = string.Empty;
