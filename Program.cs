@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RuleTemplateEngine;
 using RuleTemplateEngine.Dtos;
 using RuleTemplateEngine.Events;
@@ -20,6 +21,15 @@ await RunExternalWorkplanTaskTestAsync(lemParams, actionItemTemplate, RuleName);
 await RunMultipleLemRecordsTestAsync(actionItemTemplate, RuleName);
 
 Console.WriteLine("\nAll tests completed.");
+
+// ══════════════════════════════════════════════════════
+//  Benchmark: V1 (flat List<string>) vs V2 (2D List<List<string>>)
+// ══════════════════════════════════════════════════════
+Console.WriteLine("\n══════════════════════════════════════════════════════");
+Console.WriteLine(" Benchmark: V1 (flat) vs V2 (2D) TemplateParam");
+Console.WriteLine("══════════════════════════════════════════════════════\n");
+
+RunBenchmark();
 
 // ----------------- Helpers -----------------
 
@@ -296,6 +306,101 @@ static Task RunMultipleLemRecordsTestAsync(
 
     Console.WriteLine();
     return Task.CompletedTask;
+}
+
+static void RunBenchmark()
+{
+    // Build a dataset with 3 LEM records
+    var lemDtos = new List<EntityWorkAreaLevelDetailIntegrationDto>
+    {
+        new() { Id = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333") },
+        new() { Id = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("bbbbbbbb-3333-3333-3333-333333333333") },
+        new() { Id = Guid.Parse("cccccccc-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("cccccccc-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("cccccccc-3333-3333-3333-333333333333") }
+    };
+    var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
+    var datasetList = new List<IDataRecord>(lemRecords);
+
+    // ── V1 (flat) ──
+    // 2-placeholder, direct hit (no fallback needed)
+    var v1Direct = new TemplateParam
+    {
+        Template = "A002IR_{0}_{1}",
+        Params = { "[LEM.EntityId]", "[LEM.WorkAreaId]" }
+    };
+
+    // ── V2 with 1 expression per placeholder (best case) ──
+    var v2Single = new TemplateParamV2
+    {
+        Template = "A002IR_{0}_{1}",
+        Params = new List<List<string>>
+        {
+            new() { "[LEM.EntityId]" },
+            new() { "[LEM.WorkAreaId]" }
+        }
+    };
+
+    // ── V2 with 5 expressions per placeholder (4 nulls then hit) ──
+    var v2Deep = new TemplateParamV2
+    {
+        Template = "A002IR_{0}_{1}",
+        Params = new List<List<string>>
+        {
+            new() { "[LEM.Missing1]", "[LEM.Missing2]", "[LEM.Missing3]", "[LEM.Missing4]", "[LEM.EntityId]" },
+            new() { "[LEM.Nope1]", "[LEM.Nope2]", "[LEM.Nope3]", "[LEM.Nope4]", "[LEM.WorkAreaId]" }
+        }
+    };
+
+    // Correctness check
+    var v1Result = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(v1Direct, datasetList);
+    var v2SingleResult = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Single, datasetList);
+    var v2DeepResult = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Deep, datasetList);
+
+    Console.WriteLine("Correctness check:");
+    Console.WriteLine($"  V1 direct       = {v1Result}");
+    Console.WriteLine($"  V2 single (1)   = {v2SingleResult}");
+    Console.WriteLine($"  V2 deep   (5)   = {v2DeepResult}");
+    Console.WriteLine($"  All match       = {v1Result == v2SingleResult && v1Result == v2DeepResult}");
+
+    // Benchmark
+    const int warmup = 1_000;
+    const int iterations = 100_000;
+
+    // Warmup all paths
+    for (var i = 0; i < warmup; i++)
+    {
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(v1Direct, datasetList);
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Single, datasetList);
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Deep, datasetList);
+    }
+
+    // V1 flat
+    var sw = Stopwatch.StartNew();
+    for (var i = 0; i < iterations; i++)
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(v1Direct, datasetList);
+    sw.Stop();
+    var v1Ms = sw.Elapsed.TotalMilliseconds;
+
+    // V2 single (1 per placeholder)
+    sw.Restart();
+    for (var i = 0; i < iterations; i++)
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Single, datasetList);
+    sw.Stop();
+    var v2SingleMs = sw.Elapsed.TotalMilliseconds;
+
+    // V2 deep (5 per placeholder, 4 nulls + 1 hit)
+    sw.Restart();
+    for (var i = 0; i < iterations; i++)
+        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(v2Deep, datasetList);
+    sw.Stop();
+    var v2DeepMs = sw.Elapsed.TotalMilliseconds;
+
+    Console.WriteLine($"\nBenchmark ({iterations:N0} iterations):");
+    Console.WriteLine($"  {"Scenario",-35} {"Time",-15} {"vs V1",-12}");
+    Console.WriteLine($"  {"--------",-35} {"----",-15} {"-----",-12}");
+    Console.WriteLine($"  {"V1  flat (2 params)",-35} {v1Ms,10:F2} ms {"baseline",12}");
+    Console.WriteLine($"  {"V2  1 expr/placeholder (2x1)",-35} {v2SingleMs,10:F2} ms {(v2SingleMs - v1Ms),+9:F2} ms");
+    Console.WriteLine($"  {"V2  5 expr/placeholder (2x5)",-35} {v2DeepMs,10:F2} ms {(v2DeepMs - v1Ms),+9:F2} ms");
+    Console.WriteLine();
 }
 
 static ActionItem BuildActionItem(

@@ -84,6 +84,46 @@ namespace RuleTemplateEngine.TemplateEngine
             return null;
         }
 
+        /// <summary>
+        /// V2: Resolves a TemplateParamV2 (2D params) against the dataset.
+        /// Params[i] is a list of fallback expressions for placeholder {i}.
+        /// For each placeholder, expressions are tried in order; first non-empty value wins.
+        /// </summary>
+        public static string ResolveV2(TemplateParamV2 param, IReadOnlyList<IDataRecord> dataset)
+        {
+            if (param == null || string.IsNullOrEmpty(param.Template))
+                return string.Empty;
+
+            if (param.Params == null || param.Params.Count == 0)
+                return param.Template;
+
+            var keyed = BuildKeyedDataset(dataset);
+            var rawValues = new object?[param.Params.Count];
+
+            for (var i = 0; i < param.Params.Count; i++)
+            {
+                var candidates = param.Params[i];
+                if (candidates == null || candidates.Count == 0)
+                {
+                    rawValues[i] = null;
+                    continue;
+                }
+
+                // Try each candidate expression; first non-empty wins
+                foreach (var expr in candidates)
+                {
+                    var resolved = ExpressionResolver.Resolve(expr, keyed);
+                    if (resolved != null && !string.IsNullOrWhiteSpace(resolved.ToString()))
+                    {
+                        rawValues[i] = resolved;
+                        break;
+                    }
+                }
+            }
+
+            return FormatSafely(param.Template, rawValues);
+        }
+
         private static string FormatSafely(string template, IReadOnlyList<object?> values)
         {
             var args = values
