@@ -29,7 +29,17 @@ namespace RuleTemplateEngine.Helpers
                 string text = Regex.Replace(key, Regex.Escape("[") + "\\d+" + Regex.Escape("]"), "[]");
                 if (!_typeProperties.ContainsKey(text))
                 {
-                    throw new NotSupportedException($"Property '{text}' not found on type '{typeof(TEntity).Name}'.");
+                    // Property exists in JSON but not in the type map (e.g. declared as object).
+                    // Fall back to returning the raw value from the JsonElement.
+                    return _jsonProperties[key].ValueKind switch
+                    {
+                        JsonValueKind.String => _jsonProperties[key].GetString(),
+                        JsonValueKind.Number => _jsonProperties[key].TryGetInt64(out long l) ? l : _jsonProperties[key].GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Null => null,
+                        _ => _jsonProperties[key].GetRawText()
+                    };
                 }
 
                 return _jsonProperties[key].Deserialize(_typeProperties[text]);
