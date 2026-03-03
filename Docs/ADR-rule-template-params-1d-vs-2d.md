@@ -1,4 +1,4 @@
-# ADR: Rule template params — 1D vs 2D array
+# ADR: Rule template params — flat list vs per-placeholder fallback lists
 
 ## Status
 
@@ -6,163 +6,286 @@ TBD.
 
 ## Context
 
-Rule templates resolve placeholders (`{0}`, `{1}`, …) from a dataset using expressions like `[Workplan.Id]` or `[EventMessage.WorkplanTask.WorkAreaId]`. Each placeholder can be bound to:
+Rule templates resolve placeholders (`{0}`, `{1}`, …) from a dataset using expressions like `[Workplan.Id]` or `[Event.ProjectId]`. Each placeholder can be bound to one expression or to multiple fallback expressions (first non-empty wins). This ADR compares two ways to represent that in rule configuration and in the engine.
 
-- **One expression** (e.g. `{0}` ← `[Workplan.Id]`), or  
-- **Multiple fallback expressions** (e.g. `{0}` ← first non-empty among `[Workplan.Id]`, `[EventData.WorkplanTask.Id]`).
+---
 
-We need a consistent way to represent this in rule JSON and in the resolution engine. Two approaches are used in the codebase:
+## Option 1: Flat params (single list — `params[i]` → `{i}`)
 
-1. **1D params** — `params` is a flat list of strings; `params[i]` maps to `{i}`. For a single placeholder with fallbacks, the engine treats multiple entries as “first non-empty” only when the template is exactly `"{0}"`.
-2. **2D params** — `params` is a list of lists; `params[i]` is the list of candidate expressions for `{i}`. The engine tries each candidate in order and uses the first non-empty value per placeholder.
+**Idea:** `params` is a single array of strings. Slot `i` in the array maps to placeholder `{i}`. Fallbacks are only supported when the template has a single placeholder `"{0}"`: then multiple entries in `params` are tried in order until one resolves non-empty.
 
-This ADR documents both formats, their pros/cons, and how benchmarks inform the choice.
+### JSON rule config (Option 1)
 
-## Exemplary rules
-
-The repo includes two Mongo-style rule examples that are semantically equivalent but use the two param formats.
-
-### 1D params — `WPTASK` (flat list)
-
-- **RuleName**: `WPTASK`
-- **File**: `Docs/A002IR-mongo-example.json` (first document)
-
-**ActionItemTemplateDefinition** (excerpt):
+Full rule using flat params. EntityId uses fallbacks (template `"{0}"`); Description and SourceSystemKey use one expression per placeholder.
 
 ```json
 {
-  "Description": {
-    "Params": ["[Workplan.Name]"],
-    "Template": "{0}"
+  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc8",
+  "RuleName": "WPTASK",
+  "Events": ["ExternalWorkplanTaskEvent"],
+  "ActionItemTemplateDefinition": {
+    "SourceSystem": 1,
+    "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
+    "Description": {
+      "Params": ["[Workplan.Name]"],
+      "Template": "{0}"
+    },
+    "TaskId": {
+      "Params": ["[Workplan.RootTaskId]"],
+      "Template": "{0}"
+    },
+    "EntityId": {
+      "Params": [
+        "[Event.EntityIds[0]]",
+        "[Event.Entities[0].WorkAreaEntityId]",
+        "[Event.EntityId]"
+      ],
+      "Template": "{0}"
+    },
+    "SourceSystemKey": {
+      "Params": ["[Workplan.Id]"],
+      "Template": "WPTASK_{0}"
+    }
   },
-  "SourceSystemKey": {
-    "Params": ["[Workplan.Id]"],
-    "Template": "WPTASK_{0}"
-  }
-}
-```
-
-- One placeholder: one string in `Params`. Multiple placeholders: one string per slot, e.g. `["[LEM.Name]", "[Event.ProjectId]"]` for `"Review {0} for project {1}"`.
-- Fallbacks for a single `{0}` are represented by multiple entries in the same flat list; the engine uses the first non-empty only when `Template` is `"{0}"`.
-
-### 2D params — `WPTASK_2D` (list of lists)
-
-- **RuleName**: `WPTASK_2D`
-- **File**: `Docs/A002IR-mongo-example.json` (second document)
-
-**ActionItemTemplateDefinition** (excerpt):
-
-```json
-{
-  "Description": {
-    "Params": [["[Workplan.Name]"]],
-    "Template": "{0}"
-  },
-  "SourceSystemKey": {
-    "Params": [
-      ["[Workplan.Id]", "[EventData.WorkplanTask.Id]"],
-      ["[EventData.WorkplanTask.WorkAreaId]", "[EventData.WorkplanTask.WorkareaId]"]
+  "Filters": {
+    "DataSources": [
+      {
+        "Key": "AllWorkplan",
+        "DataSourceParams": {
+          "WorkAreaId": {
+            "Params": ["[EventMessage.WorkplanTask.WorkAreaId]"],
+            "Template": "{0}"
+          },
+          "TaskId": {
+            "Params": ["[EventMessage.WorkplanTask.TaskId]"],
+            "Template": "{0}"
+          }
+        }
+      }
     ],
-    "Template": "WPTASK_{0}_{1}"
+    "ValidationRules": []
+  },
+  "Checks": {
+    "DataSources": [],
+    "ValidationRules": []
   }
 }
 ```
 
-- Each placeholder has its own list of candidates. For `{0}` and `{1}`, `Params` has two inner arrays; the engine tries each list in order and uses the first non-empty per placeholder.
-- Fallbacks are explicit and work for any template, not only `"{0}"`.
+- **EntityId:** Template is exactly `"{0}"`, so the three entries in `Params` are used as fallbacks (first non-empty wins). This is the only case in flat params where fallbacks work.
+- **Description / SourceSystemKey:** One expression per placeholder. No fallbacks for `{0}` and `{1}` in the same template.
 
-## Pros and cons
-
-### 1D params (flat list)
-
-| Pros | Cons |
-|------|------|
-| Simple mental model: `params[i]` → `{i}`. | Fallback semantics only apply when template is exactly `"{0}"`; otherwise multiple params for one placeholder are ambiguous. |
-| Compact JSON and easy to author for “one expression per placeholder”. | Hard to express “first non-empty for `{0}`” in a template like `"WPTASK_{0}_{1}"` where `{0}` has fallbacks. |
-| Single type: `List<string>`. Easy to validate and serialize. | Mixing “one value per slot” and “fallbacks for one slot” in the same list can be confusing. |
-
-### 2D params (list of lists)
-
-| Pros | Cons |
-|------|------|
-| Clear semantics: `params[i]` = list of candidates for `{i}`; first non-empty wins. | Slightly more verbose JSON (extra brackets). |
-| Fallbacks work for every placeholder and any template. | Two shapes to support if the system accepts both 1D and 2D. |
-| Self-describing: structure reflects “try these in order”. | Iteration over inner lists is explicit; with many fallbacks, more resolutions are attempted until one succeeds. |
-
-## Benchmarks and why 1D vs 2D resolution don’t differ meaningfully
-
-The project measures resolution performance with two harnesses:
-
-| Harness | Purpose |
-|--------|---------|
-| **Manual** (`Program.RunBenchmark`) | 100k iterations, ~50 LEM records; raw total time per scenario. |
-| **BenchmarkDotNet** (`ResolutionBenchmarks`) | Release build, same dataset; per-call time and memory with warmup/JIT and statistics. |
-
-**How to run:** `dotnet run -c Release` (runs tests, manual benchmark, then BenchmarkDotNet). For BenchmarkDotNet only: run the app and let it complete the “BenchmarkDotNet” section; or use a dedicated benchmark runner.
+**Risk with flat params when using multiple placeholders:** If we want `"Review {0} for project {1}"` with fallbacks for both (e.g. {0} ← LEM.Name or LEM.CategoryName, {1} ← Event.ProjectId), we cannot express it in one rule. Putting four strings in `Params` would map `params[0]`→{0}, `params[1]`→{1}, `params[2]`→{2}, `params[3]`→{3}; the template only has {0} and {1}, so the engine would use the first two values and we’d get “Review (first) for project (second)” — but the “second” value would actually be the second candidate for {0}, not for {1}. So the flow breaks. With flat params, for any template with multiple placeholders you must have **exactly as many values as placeholders** (e.g. 3 placeholders → 3 entries in `Params`), and you need to **know for sure** that each of those expressions will resolve to a value; there is no per-placeholder fallback. If any slot can be missing, flat params cannot express fallbacks for that slot without breaking the mapping for the others.
 
 ---
 
-### Benchmark setup
+## Option 2: Per-placeholder fallback lists (2D params)
 
-- **Dataset:** 50 records (3 fixed LEM DTOs + 47 generated), transformed to `IDataRecord` with prefix `"LEM"`.
-- **Template:** `"A002IR_{0}_{1}"` with two placeholders.
+**Idea:** `params` is an array of arrays. `params[i]` is the list of candidate expressions for placeholder `{i}`. For each placeholder, the engine tries the candidates in order and uses the first non-empty value. Fallbacks work for every placeholder and any template.
+
+### JSON rule config (Option 2)
+
+Same rule shape with 2D params. EntityId and Description can both use per-placeholder fallbacks.
+
+```json
+{
+  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc9",
+  "RuleName": "WPTASK_2D",
+  "Events": ["ExternalWorkplanTaskEvent"],
+  "ActionItemTemplateDefinition": {
+    "SourceSystem": 1,
+    "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
+    "Description": {
+      "Params": [
+        ["[LEM.MissingName]", "[LEM.Name]", "[LEM.CategoryName]"],
+        ["[Event.ProjectName]", "[Event.ProjectId]"]
+      ],
+      "Template": "Review {0} for project {1}"
+    },
+    "TaskId": {
+      "Params": [["[Workplan.RootTaskId]"]],
+      "Template": "{0}"
+    },
+    "EntityId": {
+      "Params": [
+        [
+          "[Event.EntityIds[0]]",
+          "[Event.Entities[0].WorkAreaEntityId]",
+          "[Event.EntityId]"
+        ]
+      ],
+      "Template": "{0}"
+    },
+    "SourceSystemKey": {
+      "Params": [
+        ["[Workplan.Id]", "[EventData.WorkplanTask.Id]"],
+        ["[EventData.WorkplanTask.WorkAreaId]", "[EventData.WorkplanTask.WorkareaId]"]
+      ],
+      "Template": "WPTASK_{0}_{1}"
+    }
+  },
+  "Filters": {
+    "DataSources": [
+      {
+        "Key": "AllWorkplan",
+        "DataSourceParams": {
+          "WorkAreaId": {
+            "Params": [["[EventMessage.WorkplanTask.WorkAreaId]"]],
+            "Template": "{0}"
+          },
+          "TaskId": {
+            "Params": [["[EventMessage.WorkplanTask.TaskId]"]],
+            "Template": "{0}"
+          }
+        },
+        "Params": {}
+      }
+    ],
+    "ValidationRules": []
+  },
+  "Checks": {
+    "DataSources": [],
+    "ValidationRules": []
+  }
+}
+```
+
+- **EntityId:** One inner list with three candidates for `{0}`; first non-empty wins.
+- **Description:** Two inner lists: first list = candidates for `{0}`, second = candidates for `{1}`. No cross-talk; each placeholder has its own fallback chain.
+- **SourceSystemKey:** Two placeholders, each with two candidates. Safe and unambiguous.
+
+Full examples are in `Docs/WPTASK-mongo-example.json` (both documents).
+
+---
+
+## C# mapping (engine)
+
+Below is how the two options map to the current engine types. The same semantics are reflected in the JSON above.
+
+### Option 1 — Flat (TemplateParam)
+
+One expression per placeholder for multi-placeholder templates:
+
+```csharp
+SourceSystemKey = new TemplateParam
+{
+    Template = "A002IR_{0}_{1}",
+    Params = { "[LEM.EntityId]", "[LEM.WorkAreaId]" }
+};
+```
+
+Fallback only works with a single `"{0}"` placeholder — all params become fallback candidates for that one slot:
+
+```csharp
+EntityId = new TemplateParam
+{
+    Template = "{0}",
+    Params = { "[Event.EntityIds[0]]", "[Event.Entities[0].WorkAreaEntityId]", "[Event.EntityId]" }
+};
+```
+
+### Option 2 — Per-placeholder fallback lists (TemplateParamV2)
+
+Each placeholder gets its own independent fallback chain:
+
+```csharp
+SourceSystemKey = new TemplateParamV2
+{
+    Template = "A002IR_{0}_{1}",
+    Params = new List<List<string>>
+    {
+        new() { "[LEM.EntityId]" },
+        new() { "[LEM.WorkAreaId]" }
+    }
+};
+
+Description = new TemplateParamV2
+{
+    Template = "Review {0} for project {1}",
+    Params = new List<List<string>>
+    {
+        new() { "[LEM.MissingName]", "[LEM.Name]", "[LEM.EntityId]" },  // {0} fallbacks
+        new() { "[Event.ProjectName]", "[Event.ProjectId]" }              // {1} fallbacks
+    }
+};
+```
+
+---
+
+## Comparison
+
+| Aspect | Option 1: Flat params | Option 2: Per-placeholder fallback lists |
+|--------|------------------------|------------------------------------------|
+| **Shape** | `params`: array of strings | `params`: array of arrays of strings |
+| **Mapping** | `params[i]` → `{i}` | `params[i]` = candidate list for `{i}` |
+| **Fallback for single `{0}`** | Yes (multiple entries = try in order) | Yes (one inner list with N candidates) |
+| **Fallback for `{0}` and `{1}` in one template** | No; would break mapping | Yes; each placeholder has its own list |
+| **JSON size** | Smaller (no extra brackets) | Slightly larger (nested arrays) |
+| **Mental model** | “One value per slot” (or “all for {0}” when template is `"{0}"`) | “Per-slot list of alternatives” |
+| **Risk** | Easy to mis-use in multi-placeholder templates (extra values map to non-existent placeholders) | Structure matches semantics; no ambiguity |
+
+---
+
+## Benchmarks
+
+Benchmarks compare resolution cost and memory for the same logical outcome (e.g. `A002IR_{0}_{1}` with two expressions) in both shapes, and for 2D with multiple fallbacks per placeholder.
+
+### How we benchmark
+
+- **Dataset:** 50 LEM records (same for all runs), built once per benchmark run.
 - **Scenarios:**
-  - **V1 flat:** 1D `Params = ["[LEM.EntityId]", "[LEM.WorkAreaId]"]` — two expressions, one per placeholder.
-  - **V2 1 expr/placeholder:** 2D `Params = [["[LEM.EntityId]"], ["[LEM.WorkAreaId]"]]` — same expressions, one candidate per placeholder.
-  - **V2 5 exprs/placeholder:** 2D with two inner lists of 5 candidates each (4 missing paths + 1 hit); exercises fallback iteration.
+  - **Flat, 2 params:** `TemplateParam` with `Params = ["[LEM.EntityId]", "[LEM.WorkAreaId]"]` (one expression per placeholder).
+  - **2D, 1 expr/placeholder:** `TemplateParamV2` with `Params = [["[LEM.EntityId]"], ["[LEM.WorkAreaId]"]]` (same expressions, 2D shape).
+  - **2D, 5 exprs/placeholder:** `TemplateParamV2` with two inner lists of 5 candidates each (4 missing paths + 1 hit) to stress fallback iteration.
 
----
+Correctness is checked first: all three produce the same string for the same dataset. Then we measure:
+
+1. **Manual:** 1k warmup, then 100k iterations per scenario (same dataset, same process). Total time per scenario.
+2. **BenchmarkDotNet:** Release build, `[MemoryDiagnoser]`, same dataset and templates. Reports mean time per call, error (99.9% CI), std dev, Gen0/Gen1 per 1k ops, and allocated memory per operation.
+
+**Important:** BenchmarkDotNet runs each method in isolation (separate process and iterations), so we do not compare Flat vs 2D in a single process; we compare each scenario to its own baseline. The manual run compares all three in one process but has higher variance. Both are valid: BenchmarkDotNet for stable per-call and memory numbers, manual for a quick relative check.
 
 ### BenchmarkDotNet results (timing and memory)
 
-`ResolutionBenchmarks` is annotated with `[MemoryDiagnoser]`. Representative output (Release, single run):
+`ResolutionBenchmarks` is annotated with `[MemoryDiagnoser]`. Method names in code: `V1_Flat_2Params`, `V2_1ExprPerPlaceholder`, `V2_5ExprPerPlaceholder`. Representative output (Release, single run):
 
 | Method | Mean | Error (99.9% CI) | StdDev | Gen0 / 1k op | Gen1 / 1k op | Allocated / op |
 |--------|------|-------------------|--------|----------------|----------------|-----------------|
-| **V1_Flat_2Params** | **14.06 µs** | 0.257 µs | 0.241 µs | 6.18 | 0.015 | **37.95 KB** |
-| **V2_1ExprPerPlaceholder** | **14.24 µs** | 0.285 µs | 0.317 µs | 6.21 | 0.015 | **38.13 KB** |
-| **V2_5ExprPerPlaceholder** | **13.40 µs** | 0.193 µs | 0.161 µs | 6.59 | — | **40.38 KB** |
+| **Flat_2Params** | **14.06 µs** | 0.257 µs | 0.241 µs | 6.18 | 0.015 | **37.95 KB** |
+| **2D_1ExprPerPlaceholder** | **14.24 µs** | 0.285 µs | 0.317 µs | 6.21 | 0.015 | **38.13 KB** |
+| **2D_5ExprPerPlaceholder** | **13.40 µs** | 0.193 µs | 0.161 µs | 6.59 | — | **40.38 KB** |
 
 - **Mean:** Average time per resolution call.  
 - **Error:** Half-width of 99.9% confidence interval.  
 - **StdDev:** Standard deviation of measured times.  
-- **Gen0 / Gen1:** GC collections per 1,000 operations (Gen1 “—” = negligible).  
-- **Allocated:** Managed memory allocated per single invocation (includes `BuildKeyedDataset`, resolution, and `string.Format`).
+- **Gen0 / Gen1:** GC collections per 1,000 operations.  
+- **Allocated:** Managed memory per single invocation (includes building the keyed dataset, resolution, and `string.Format`).
 
-**Takeaway:** All three are in the **~13–14 µs** band. Allocations are **~38–40 KB** per call (dominated by keyed dataset building and resolution). 2D with 5 candidates per placeholder allocates slightly more but can measure a bit faster due to cheap null lookups and variance.
+**Takeaway:** All three are in the **~13–14 µs** range with **~38–40 KB** allocated per call. Option 2 with 5 candidates per placeholder allocates slightly more but can measure a bit faster due to cheap null lookups and variance. There is no meaningful performance or memory advantage for either option.
+
+### Why 2D isn’t slower (and can look slightly faster)
+
+- Most cost is in **expression resolution** (parsing, keying dataset, record lookup, type/JSON handling), not in looping over the small inner list.
+- **Short-circuit:** For 2D we stop at the first non-empty per placeholder; failed lookups are cheap.
+- For “1 expression per placeholder”, Flat and 2D do the **same number** of resolutions; any difference is JIT/measurement noise.
+
+So: **benchmarks do not justify choosing one option over the other for performance or memory.**
+
+### How to run
+
+- Full run (tests + manual benchmark + BenchmarkDotNet): `dotnet run -c Release`
+- BenchmarkDotNet runs after the manual benchmark and prints the table above plus optional exports (see References).
 
 ---
-
-### Manual benchmark (100k iterations, total time)
-
-Typical range on the same dataset:
-
-| Scenario | Total time (100k iter) | vs V1 flat |
-|----------|------------------------|------------|
-| V1 flat (2 params) | ~2.0–2.5 s | baseline |
-| V2 1 expr/placeholder (2×1) | ~1.8–2.2 s | similar / slightly lower |
-| V2 5 expr/placeholder (2×5) | ~1.8–2.0 s | similar / slightly lower |
-
-Run-to-run variation is significant; use BenchmarkDotNet for stable, comparable numbers.
-
----
-
-### Why 2D doesn’t have to be slower (and can look faster)
-
-- **Cost is dominated by expression resolution**, not by “looping the 2D array”:
-  - Parsing `[Source.Key.Property]`, grouping the dataset by key, indexing into the record, and (in this implementation) JSON deserialization / type lookup dominate.
-  - The extra loop over the inner list is a small number of iterations (e.g. 1 or 5) and is cheap compared to a single `ExpressionResolver.Resolve` call.
-- **Short-circuit on first hit:** For 2D, we stop at the first non-empty value per placeholder. For “5 candidates, 4 null + 1 hit”, we do 4 fast null lookups and 1 full resolve. The misses are cheap, so total time can be similar or slightly better in a given run.
-- **No algorithmic advantage for 1D:** For “1 expression per placeholder”, 1D and 2D do the same number of resolutions. Any timing gap is attributable to code layout, inlining, or measurement noise.
-
-So: **benchmarks show that 1D vs 2D resolution do not make a meaningful performance or memory difference**; the 2D version is not slower despite iterating over the 2D array, and it can occasionally appear a bit faster due to cheap failed lookups and normal variance.
 
 ## Decision
 
 TBD.
 
+---
+
 ## References
 
-- Example rules: `Docs/A002IR-mongo-example.json` (WPTASK, WPTASK_2D).
-- Resolution: `TemplateEngine/TemplateEngine.cs` (`Resolve` for 1D, `ResolveV2` for 2D).
-- Benchmarks: `Program.RunBenchmark`, `ResolutionBenchmarks.cs` (includes `[MemoryDiagnoser]`). For more precision: add `[NativeMemoryDiagnoser]` or use BenchmarkDotNet’s `DisassemblyDiagnoser` / export options.
+- Example rules: `Docs/WPTASK-mongo-example.json` (WPTASK = Option 1, WPTASK_2D = Option 2).
+- Resolution: `TemplateEngine/TemplateEngine.cs` — `Resolve` (Option 1), `ResolveV2` (Option 2).
+- Benchmarks: `Program.RunBenchmark` (manual), `ResolutionBenchmarks.cs` (BenchmarkDotNet, `[MemoryDiagnoser]`). For more precision: add `[NativeMemoryDiagnoser]` or use BenchmarkDotNet’s `DisassemblyDiagnoser` / export options.
