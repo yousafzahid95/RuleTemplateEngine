@@ -1,0 +1,99 @@
+{
+  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc8",
+  "RuleName": "WPTASK",
+  "Events": ["ExternalWorkplanTaskEvent"],
+  "ActionItemTemplateDefinition": {
+    "SourceSystem": 1,
+    "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
+    "Description": {
+      "Params": ["[Workplan.Name]"],
+      "Template": "{0}"
+    },
+    "TaskId": {
+      "Params": ["[Workplan.RootTaskId]"],
+      "Template": "{0}"
+    },
+    "EntityId": {
+      "Params": ["[Workplan.Entities[0].WorkAreaEntityId]"],
+      "Template": "{0}"
+    },
+    "SourceSystemKey": {
+      "Params": ["[Workplan.Id]"],
+      "Template": "WPTASK_{0}"
+    }
+  },
+  "Filters": {
+    "DataSources": [
+      {
+        "Key": "AllWorkplan",
+        "DataSourceParams": {
+          "WorkAreaId": {
+            "Params": ["[EventMessage.WorkplanTask.WorkAreaId]"],
+            "Template": "{0}"
+          },
+          "TaskId": {
+            "Params": ["[EventMessage.WorkplanTask.TaskId]"],
+            "Template": "{0}"
+          }
+        }
+      }
+    ],
+    "ValidationRules": []
+  },
+  "Checks": {
+    "DataSources": [],
+    "ValidationRules": []
+  }
+}
+
+{
+  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc9",
+  "RuleName": "WPTASK_2D",
+  "Events": ["ExternalWorkplanTaskEvent"],
+  "ActionItemTemplateDefinition": {
+    "SourceSystem": 1,
+    "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
+    "Description": {
+      "Params": [["[Workplan.Name]"]],
+      "Template": "{0}"
+    },
+    "TaskId": {
+      "Params": [["[Workplan.RootTaskId]"]],
+      "Template": "{0}"
+    },
+    "EntityId": {
+      "Params": [["[Workplan.Entities[0].WorkAreaEntityId]"]],
+      "Template": "{0}"
+    },
+    "SourceSystemKey": {
+      "Params": [
+        ["[Workplan.Id]", "[EventData.WorkplanTask.Id]"],
+        ["[EventData.WorkplanTask.WorkAreaId]", "[EventData.WorkplanTask.WorkareaId]"]
+      ],
+      "Template": "WPTASK_{0}_{1}"
+    }
+  },
+  "Filters": {
+    "DataSources": [
+      {
+        "Key": "AllWorkplan",
+        "DataSourceParams": {
+          "WorkAreaId": {
+            "Params": [["[EventMessage.WorkplanTask.WorkAreaId]"]],
+            "Template": "{0}"
+          },
+          "TaskId": {
+            "Params": [["[EventMessage.WorkplanTask.TaskId]"]],
+            "Template": "{0}"
+          }
+        },
+        "Params": {}
+      }
+    ],
+    "ValidationRules": []
+  },
+  "Checks": {
+    "DataSources": [],
+    "ValidationRules": []
+  }
+}

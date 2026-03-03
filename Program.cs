@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Running;
 using RuleTemplateEngine;
 using RuleTemplateEngine.Dtos;
 using RuleTemplateEngine.Events;
@@ -22,14 +24,19 @@ await RunMultipleLemRecordsTestAsync(actionItemTemplate, RuleName);
 
 Console.WriteLine("\nAll tests completed.");
 
-// ══════════════════════════════════════════════════════
-//  Benchmark: V1 (flat List<string>) vs V2 (2D List<List<string>>)
-// ══════════════════════════════════════════════════════
+// Manual stopwatch-based benchmark for quick local checks
 Console.WriteLine("\n══════════════════════════════════════════════════════");
-Console.WriteLine(" Benchmark: V1 (flat) vs V2 (2D) TemplateParam");
+Console.WriteLine(" Manual Benchmark: V1 (flat) vs V2 (2D) TemplateParam");
 Console.WriteLine("══════════════════════════════════════════════════════\n");
 
 RunBenchmark();
+
+// BenchmarkDotNet benchmark for more reliable performance numbers
+Console.WriteLine("\n══════════════════════════════════════════════════════");
+Console.WriteLine(" BenchmarkDotNet: V1 (flat) vs V2 (2D) TemplateParam");
+Console.WriteLine("══════════════════════════════════════════════════════\n");
+
+BenchmarkRunner.Run<ResolutionBenchmarks>();
 
 // ----------------- Helpers -----------------
 
@@ -310,13 +317,23 @@ static Task RunMultipleLemRecordsTestAsync(
 
 static void RunBenchmark()
 {
-    // Build a dataset with 3 LEM records
+    // Build a dataset with many LEM records to exercise resolution over a larger dataset
     var lemDtos = new List<EntityWorkAreaLevelDetailIntegrationDto>
     {
         new() { Id = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333") },
         new() { Id = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("bbbbbbbb-3333-3333-3333-333333333333") },
         new() { Id = Guid.Parse("cccccccc-1111-1111-1111-111111111111"), WorkAreaId = Guid.Parse("cccccccc-2222-2222-2222-222222222222"), ProjectId = Guid.Parse("cccccccc-3333-3333-3333-333333333333") }
     };
+    // Add more synthetic records so dataset is larger (e.g. 50 total)
+    for (var i = 0; i < 47; i++)
+    {
+        lemDtos.Add(new EntityWorkAreaLevelDetailIntegrationDto
+        {
+            Id = Guid.NewGuid(),
+            WorkAreaId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid()
+        });
+    }
     var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
     var datasetList = new List<IDataRecord>(lemRecords);
 
