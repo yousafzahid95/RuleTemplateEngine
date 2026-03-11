@@ -9,8 +9,6 @@ public class ResolutionBenchmarks
 {
     private IReadOnlyList<IDataRecord> _dataset = null!;
     private TemplateParam _v1Direct = null!;
-    private TemplateParamV2 _v2Single = null!;
-    private TemplateParamV2 _v2Deep = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -41,37 +39,12 @@ public class ResolutionBenchmarks
             Params = { "[LEM.EntityId]", "[LEM.WorkAreaId]" }
         };
 
-        _v2Single = new TemplateParamV2
-        {
-            Template = "A002IR_{0}_{1}",
-            Params = new List<List<string>>
-            {
-                new() { "[LEM.EntityId]" },
-                new() { "[LEM.WorkAreaId]" }
-            }
-        };
-
-        _v2Deep = new TemplateParamV2
-        {
-            Template = "A002IR_{0}_{1}",
-            Params = new List<List<string>>
-            {
-                new() { "[LEM.Missing1]", "[LEM.Missing2]", "[LEM.Missing3]", "[LEM.Missing4]", "[LEM.EntityId]" },
-                new() { "[LEM.Nope1]", "[LEM.Nope2]", "[LEM.Nope3]", "[LEM.Nope4]", "[LEM.WorkAreaId]" }
-            }
-        };
+       
     }
 
     [Benchmark]
     public string V1_Flat_2Params() =>
         RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(_v1Direct, _dataset);
 
-    [Benchmark]
-    public string V2_1ExprPerPlaceholder() =>
-        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(_v2Single, _dataset);
-
-    [Benchmark]
-    public string V2_5ExprPerPlaceholder() =>
-        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(_v2Deep, _dataset);
 }
 

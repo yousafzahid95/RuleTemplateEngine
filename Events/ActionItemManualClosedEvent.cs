@@ -9,5 +9,6 @@ namespace RuleTemplateEngine.Events
     {
         public Guid WorkAreaId { get; set; }
         public Guid EntityId { get; set; }
+        public CloseReason? Reason { get; set; }
     }
 }

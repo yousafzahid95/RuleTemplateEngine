@@ -7,21 +7,16 @@ namespace RuleTemplateEngine.Models
     /// </summary>
     public class RuleTemplate
     {
-        /// <summary>MongoDB document id (optional; set when loading from DB).</summary>
-        [JsonProperty("_id")]
-        public string? Id { get; set; }
+        public string _Id { get; set; }
 
-        [JsonProperty("RuleName")]
         public string RuleName { get; set; } = string.Empty;
 
-        [JsonProperty("Events")]
+        public bool PublishEventToDataset { get; set; };
+
         public List<string> Events { get; set; } = new();
 
-        [JsonProperty("ActionItemTemplate")]
         public ActionItemTemplateDefinition ActionItemTemplate { get; set; } = new();
 
-        /// <summary>Data source definitions (e.g. LEM params). Stored under "Checks" in MongoDB.</summary>
-        [JsonProperty("Checks")]
         public RuleChecks? Checks { get; set; }
     }
 
@@ -34,7 +29,7 @@ namespace RuleTemplateEngine.Models
         public int SourceSystem { get; set; }
 
         [JsonProperty("ItemDefinitionId")]
-        public int ItemDefinitionId { get; set; }
+        public Guid ItemDefinitionGuid { get; set; }
 
         [JsonProperty("Description")]
         public TemplateParam? Description { get; set; }
@@ -64,24 +59,6 @@ namespace RuleTemplateEngine.Models
         /// </summary>
         [JsonProperty("params")]
         public List<string> Params { get; set; } = new();
-    }
-
-    /// <summary>
-    /// V2 (2D): format string + 2D param list.
-    /// Params[i] is a list of fallback expressions for placeholder {i}.
-    /// For each placeholder, the first non-empty resolved value wins.
-    /// </summary>
-    public class TemplateParamV2
-    {
-        [JsonProperty("template")]
-        public string Template { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 2D list: Params[0] = candidates for {0}, Params[1] = candidates for {1}, etc.
-        /// Each inner list is tried in order; first non-empty resolved value is used.
-        /// </summary>
-        [JsonProperty("params")]
-        public List<List<string>> Params { get; set; } = new();
     }
 
     /// <summary>
