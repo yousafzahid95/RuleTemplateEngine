@@ -1,21 +1,23 @@
+using System;
+using System.Collections.Generic;
 using RuleTemplateEngine.Interfaces;
 
 namespace RuleTemplateEngine.TemplateEngine
 {
+    public interface IExpressionResolver
+    {
+        object? Resolve(string expression, IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset);
+    }
+
     /// <summary>
     /// Resolves bracket expressions like [LEM.EntityId] or [LEM[2].EntityId]
     /// using a dataset keyed by DataSourceKey (e.g. "LEM", "InfoRequest"). Each key maps to an IEnumerable of IDataRecord from that source.
     /// </summary>
-    internal static class ExpressionResolver
+    public class ExpressionResolver : IExpressionResolver
     {
         private static readonly char[] Dot = { '.' };
 
-        /// <summary>
-        /// Resolves a single valid bracket expression e.g. "[LEM.EntityId]" or "[LEM[2].Id]".
-        /// Dataset is keyed by DataSourceKey; [DataSourceKey.Property] uses the first record,
-        /// [DataSourceKey[i].Property] uses the i-th (0-based).
-        /// </summary>
-        public static object? Resolve(string expression, IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset)
+        public object? Resolve(string expression, IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> dataset)
         {
             if (string.IsNullOrWhiteSpace(expression))
             {

@@ -1,28 +1,25 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using RuleTemplateEngine.Interfaces;
 using RuleTemplateEngine.Models;
 
 namespace RuleTemplateEngine.TemplateEngine
 {
     /// <summary>
-    /// Resolves a TemplateParam against a dataset (list of records).
-    /// Keys are derived from each record's column names
-    /// (e.g. CustomDataRecord built with prefix "LEM" has columns "LEM.EntityId").
-    /// Uses String.Format and bracket expressions like [LEM.Property], [Event.ProjectId], or [LEM[index].Property].
+    /// DI-friendly implementation of <see cref="ITemplateParamResolver"/>.
+    /// This class contains the non-static logic previously found on the static RuleTemplateEngine.
     /// </summary>
-    public static class RuleTemplateEngine
+    public class TemplateParamResolver : ITemplateParamResolver
     {
-        /// <summary>
-        /// Resolves a TemplateParam by resolving each param expression against the dataset,
-        /// then calling String.Format(template, ...values).
-        /// params[0] -> {0}, params[1] -> {1}, etc.
-        /// Special case: template "{0}" with multiple params uses first non-empty (fallback).
-        /// </summary>
-        /// <param name="param">Template and param expressions.</param>
-        /// <param name="dataset">
-        /// List of records. Each record's key (e.g. LEM, Event) is taken from its column names
-        /// (prefix used in CustomDataRecord transformation).
-        /// </param>
-        public static string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset)
+        private readonly IExpressionResolver _expressionResolver;
+
+        public TemplateParamResolver(IExpressionResolver expressionResolver)
+        {
+            _expressionResolver = expressionResolver ?? throw new ArgumentNullException(nameof(expressionResolver));
+        }
+
+        public string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset)
         {
             if (param == null || string.IsNullOrEmpty(param.Template))
             {
@@ -42,7 +39,7 @@ namespace RuleTemplateEngine.TemplateEngine
                 var currentParam = param.Params[i];
 
                 rawValues[i] = IsExpression(currentParam)
-                    ? new ExpressionResolver().Resolve(currentParam, keyed)
+                    ? _expressionResolver.Resolve(currentParam, keyed)
                     : currentParam;
             }
 
@@ -63,11 +60,6 @@ namespace RuleTemplateEngine.TemplateEngine
             return FormatSafely(param.Template, rawValues);
         }
 
-        /// <summary>
-        /// Builds keyed dataset by grouping records by the key already in their column names.
-        /// E.g. a record with columns "LEM.EntityId", "LEM.WorkAreaId" is grouped under "LEM";
-        /// a record with "Event.ProjectId" is grouped under "Event".
-        /// </summary>
         internal static IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(IReadOnlyList<IDataRecord> datasetList)
         {
             var keyed = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
@@ -97,10 +89,6 @@ namespace RuleTemplateEngine.TemplateEngine
             return keyed;
         }
 
-        /// <summary>
-        /// Infers the data source key from a record's columns
-        /// (first segment before '.' e.g. "LEM.EntityId" -> "LEM").
-        /// </summary>
         private static string? GetDataSourceKeyFromRecord(IDataRecord record)
         {
             if (record?.Columns == null || record.Columns.Length == 0)
@@ -151,3 +139,4 @@ namespace RuleTemplateEngine.TemplateEngine
         }
     }
 }
+

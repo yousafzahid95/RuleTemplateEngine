@@ -11,7 +11,7 @@ namespace RuleTemplateEngine.Models
 
         public string RuleName { get; set; } = string.Empty;
 
-        public bool PublishEventToDataset { get; set; };
+        public bool PublishEventToDataset { get; set; }
 
         public List<string> Events { get; set; } = new();
 

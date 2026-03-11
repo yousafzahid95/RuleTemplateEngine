@@ -13,10 +13,24 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+    <PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="NUnit" Version="3.13.3" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.3.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+
+    <Antlr4 Include="ANTLRParamPOC\Grammar\RuleTemplateLexer.g4"
+            Generator="MSBuild:Compile"
+            Listener="false"
+            Visitor="false" />
+    <Antlr4 Include="ANTLRParamPOC\Grammar\RuleTemplateParser.g4"
+            Generator="MSBuild:Compile"
+            Listener="false"
+            Visitor="true" />
   </ItemGroup>
 
   <!-- Exclude tests from the main project compile to keep test code in the separate test project -->

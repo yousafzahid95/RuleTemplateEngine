@@ -3,10 +3,11 @@ using System.Collections;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq; // Added just in case, though the code uses System.Text.Json mostly.
 
 namespace RuleTemplateEngine.Helpers
 {
-    public class CustomDataRecord<TEntity> : IDataRecord, IRecord
+    public class EventCustomDataRecord<TEntity> : IDataRecord, IRecord
     {
         private readonly string _namePrefix;
         private readonly Dictionary<string, Type> _typeProperties;
@@ -29,23 +30,66 @@ namespace RuleTemplateEngine.Helpers
                 string text = Regex.Replace(key, Regex.Escape("[") + "\\d+" + Regex.Escape("]"), "[]");
                 if (!_typeProperties.ContainsKey(text))
                 {
-                    throw new NotSupportedException($"Property '{text}' not found on type '{typeof(TEntity).Name}'.");
+                    // Property exists in JSON but not in the type map (e.g. declared as object).
+                    // Fall back to returning the raw value from the JsonElement.
+                    return _jsonProperties[key].ValueKind switch
+                    {
+                        JsonValueKind.String => _jsonProperties[key].GetString(),
+                        JsonValueKind.Number => _jsonProperties[key].TryGetInt64(out long l) ? l : _jsonProperties[key].GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Null => null,
+                        _ => _jsonProperties[key].GetRawText()
+                    };
                 }
 
-                return _jsonProperties[key].Deserialize(_typeProperties[text]);
+                var targetType = _typeProperties[text];
+                var effectiveTarget = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+                // Handle enums explicitly to support both numeric and string representations
+                if (effectiveTarget.IsEnum)
+                {
+                    if (_jsonProperties[key].ValueKind == JsonValueKind.Null)
+                        return null;
+
+                    try
+                    {
+                        if (_jsonProperties[key].ValueKind == JsonValueKind.String)
+                        {
+                            var s = _jsonProperties[key].GetString();
+                            if (s is null)
+                                return null;
+                            var parsed = Enum.Parse(effectiveTarget, s, true);
+                            return parsed;
+                        }
+
+                        if (_jsonProperties[key].ValueKind == JsonValueKind.Number && _jsonProperties[key].TryGetInt64(out var l))
+                        {
+                            var obj = Enum.ToObject(effectiveTarget, l);
+                            return obj;
+                        }
+                    }
+                    catch
+                    {
+                        // fall through to generic deserialization below on failure
+                    }
+                }
+
+                return _jsonProperties[key].Deserialize(targetType);
             }
         }
 
         public virtual string Id => Guid.NewGuid().ToString();
 
         public virtual string[] Columns => _jsonProperties.Keys.ToArray();
-        public CustomDataRecord(TEntity entity, string namePrefix)
+        public EventCustomDataRecord(TEntity entity, string namePrefix)
         {
             _namePrefix = namePrefix ?? string.Empty;
             _typeProperties = new Dictionary<string, Type>();
             AddTypeProperties(typeof(TEntity), _namePrefix, _typeProperties);
 
-            _entityDocument = JsonSerializer.SerializeToDocument(entity);
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(entity);
+            _entityDocument = JsonDocument.Parse(json);
             AddJsonProperties(_entityDocument.RootElement, _namePrefix, _jsonProperties);
         }
 
@@ -62,6 +106,12 @@ namespace RuleTemplateEngine.Helpers
             foreach (PropertyInfo propertyInfo in properties)
             {
                 string propertyName = string.IsNullOrEmpty(namePrefix) ? propertyInfo.Name : $"{namePrefix}.{propertyInfo.Name}";
+
+                if (propertyInfo.PropertyType.IsPrimitive || propertyInfo.PropertyType.Namespace == "System")
+                {
+                    typesMap[propertyName] = propertyInfo.PropertyType;
+                    continue;
+                }
 
                 if (propertyInfo.PropertyType.IsArray)
                 {
@@ -80,11 +130,6 @@ namespace RuleTemplateEngine.Helpers
                     {
                         AddTypeProperties(genericArgument, $"{propertyName}[]", typesMap);
                     }
-                }
-                else if (propertyInfo.PropertyType.IsPrimitive || propertyInfo.PropertyType.Namespace == "System")
-                {
-                    typesMap[propertyName] = propertyInfo.PropertyType;
-                    continue;
                 }
                 else if (!propertyInfo.PropertyType.IsInterface && !propertyInfo.PropertyType.IsAbstract)
                 {
