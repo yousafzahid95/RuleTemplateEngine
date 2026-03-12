@@ -51,12 +51,14 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             };
 
             // Event context for resolving data source parameters
-            var initialDatasets = new Dictionary<string, IList<IDataRecord>>
-            {
-                ["Event"] = TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event").ToList(),
-                ["EventMessage"] = TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage").ToList()
-            };
-            
+            var initialDatasets = new List<IDataRecord>();
+
+            initialDatasets.AddRange(
+                TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event"));
+
+            initialDatasets.AddRange(
+                TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage"));
+
             var baseContext = new EvaluationContext(initialDatasets);
 
             // Resolve Data Source Params
@@ -75,12 +77,9 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 
             Console.WriteLine($"Fetched {allWorkplanRecords.Count} records from AllWorkplan DataSource.");
 
-            var datasets = new Dictionary<string, IList<IDataRecord>>(initialDatasets)
-            {
-                ["AllWorkplan"] = allWorkplanRecords
-            };
+            initialDatasets.AddRange(allWorkplanRecords);
 
-            var finalContext = new EvaluationContext(datasets);
+            var finalContext = new EvaluationContext(initialDatasets);
 
             // Resolve Action Item
             var desc = resolver.Resolve(rule.ActionItemTemplate.Description, finalContext);

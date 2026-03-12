@@ -62,15 +62,15 @@ public class PocComparisonBenchmarks
         initial.AddRange(workplanRecords);
         _templateParamDataset = initial;
 
-        var datasets = new Dictionary<string, IList<IDataRecord>>
-        {
-            ["Event"] = TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event").ToList(),
-            ["EventMessage"] = TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage").ToList(),
-            ["AllWorkplan"] = TransformToIDataRecord<FullTaskDTO>.TransformFromObject(dto, "AllWorkplan").ToList()
-        };
+        var datasets = TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event")
+        .Concat(TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage"))
+        .Concat(TransformToIDataRecord<FullTaskDTO>.TransformFromObject(dto, "AllWorkplan"))
+        .ToList();
 
         _antlrContext = new AntlrPoc.EvaluationContext(datasets);
+
         _templateParamResolver = new TemplateParamResolver(new ExpressionResolver());
+
         _antlrParamResolver = new AntlrPoc.AntlrParamResolver(
             new AntlrPoc.ExpressionResolver(new AntlrPoc.ExpressionCache()));
 
