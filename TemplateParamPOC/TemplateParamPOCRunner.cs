@@ -4,12 +4,20 @@ using RuleTemplateEngine.Events;
 using RuleTemplateEngine.Helpers;
 using RuleTemplateEngine.Interfaces;
 using RuleTemplateEngine.Models;
+using RuleTemplateEngine.TemplateEngine;
 
 namespace RuleTemplateEngine.TemplateParamPOC
 {
     public class TemplateParamPOCRunner
     {
-        public static async Task Run()
+        private readonly ITemplateParamResolver _templateResolver;
+
+        public TemplateParamPOCRunner(ITemplateParamResolver templateResolver)
+        {
+            _templateResolver = templateResolver;
+        }
+
+        public async Task Run()
         {
             Console.WriteLine("=================================================");
             Console.WriteLine("    TEMPLATE PARAM POC RUNNER (WPTASK)           ");
@@ -65,11 +73,8 @@ namespace RuleTemplateEngine.TemplateParamPOC
             }
             """;
 
-            // Deserialize rule to use the structured TemplateParam configuration.
-            // Note: using Newtonsoft here as that is what standard RuleTemplateEngine models use underneath.
             var rule = Newtonsoft.Json.JsonConvert.DeserializeObject<RuleTemplate>(ruleJson);
 
-            // 1. Generate Mock Event
             var mockEvent = new ExternalWorkplanTaskEvent
             {
                 WorkplanTask = new WorkplanTaskData
@@ -85,17 +90,11 @@ namespace RuleTemplateEngine.TemplateParamPOC
                 }
             };
 
-            // Event context for resolving data source parameters
             var initialDatasets = new List<IDataRecord>();
-            // Add root external event message
             initialDatasets.AddRange(TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage"));
-            // Add nested body (as some older pipelines might expect "Event." instead of "EventMessage." for body props)
             initialDatasets.AddRange(TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event"));
 
             IDataSourceAdapter adapter = new MockWorkplanAllTaskDataSource();
-            // Use DI-compatible resolver instances instead of static methods
-            var exprResolver = new TemplateEngine.ExpressionResolver();
-            var templateResolver = new TemplateEngine.TemplateParamResolver(exprResolver);
             var finalDataset = new List<IDataRecord>(initialDatasets);
 
             Console.WriteLine("\n[1] Resolving Data Sources (Flat Params)...");
@@ -104,24 +103,19 @@ namespace RuleTemplateEngine.TemplateParamPOC
             {
                 Console.WriteLine($"    Processing DataSource: {dsConfig.Key}");
 
-                // Evaluates the nested `TemplateParam` inside `params` on the dataset list
                 var resolvedParams = new Dictionary<string, string>();
                 foreach (var paramKvp in dsConfig.Params)
                 {
-                    string resolvedValue = templateResolver.Resolve(paramKvp.Value, finalDataset);
+                    string resolvedValue = _templateResolver.Resolve(paramKvp.Value, finalDataset);
                     resolvedParams[paramKvp.Key] = resolvedValue;
                     Console.WriteLine($"      -> Resolved '{paramKvp.Key}': {resolvedValue}");
                 }
 
-                // Call Adapter (which internally simulates network request using parsed TaskId / WorkAreaId)
                 var rawRecords = (await ((MockWorkplanAllTaskDataSource)adapter).GetRecordsPOCAsync(mockEvent, resolvedParams, finalDataset, CancellationToken.None)).ToList();
                 
-                // Hack to remap AllWorkplan to Workplan to match the provided JSON template
                 if (rawRecords.Count > 0)
                 {
                     var firstRec = rawRecords[0];
-
-                    // Extract properties via the indexer (which uses string names)
                     var idStr = firstRec["AllWorkplan.Id"]?.ToString();
                     var waStr = firstRec["AllWorkplan.WorkAreaId"]?.ToString();
                     var rootStr = firstRec["AllWorkplan.RootTaskId"]?.ToString();
@@ -148,16 +142,16 @@ namespace RuleTemplateEngine.TemplateParamPOC
             Console.WriteLine("\n[2] Resolving Action Item (Flat Params)...");
 
             var descParam = rule.ActionItemTemplate.Description;
-            var descRes = descParam != null ? templateResolver.Resolve(descParam, finalDataset) : string.Empty;
+            var descRes = descParam != null ? _templateResolver.Resolve(descParam, finalDataset) : string.Empty;
 
             var entityIdParam = rule.ActionItemTemplate.EntityId;
-            var entityIdRes = entityIdParam != null ? templateResolver.Resolve(entityIdParam, finalDataset) : string.Empty;
+            var entityIdRes = entityIdParam != null ? _templateResolver.Resolve(entityIdParam, finalDataset) : string.Empty;
 
             var taskIdParam = rule.ActionItemTemplate.TaskId;
-            var taskIdRes = taskIdParam != null ? templateResolver.Resolve(taskIdParam, finalDataset) : string.Empty;
+            var taskIdRes = taskIdParam != null ? _templateResolver.Resolve(taskIdParam, finalDataset) : string.Empty;
 
             var sskParam = rule.ActionItemTemplate.SourceSystemKey;
-            var sskRes = sskParam != null ? templateResolver.Resolve(sskParam, finalDataset) : string.Empty;
+            var sskRes = sskParam != null ? _templateResolver.Resolve(sskParam, finalDataset) : string.Empty;
 
 
             Console.WriteLine("    Resolved Extracted Fields:");

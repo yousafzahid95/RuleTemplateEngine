@@ -7,11 +7,16 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 {
     public class POCRunner
     {
-        public static async Task Run()
+        private readonly IAntlrParamResolver _antlrResolver;
+
+        public POCRunner(IAntlrParamResolver antlrResolver)
+        {
+            _antlrResolver = antlrResolver;
+        }
+
+        public async Task Run()
         {
             Console.WriteLine("=== Starting ANTLR POC ===");
-            var cache = new ExpressionCache();
-            var resolver = new ExpressionResolver(cache);
 
             var ruleJson = @"
 {
@@ -59,14 +64,12 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             initialDatasets.AddRange(
                 TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage"));
 
-            var baseContext = new EvaluationContext(initialDatasets);
-
             // Resolve Data Source Params
             var adapter = new MockWorkplanAllTaskDataSource();
             var dsParams = rule.Filters.DataSources[0].DataSourceParams
                 .ToDictionary(
                     kvp => kvp.Key,
-                    kvp => resolver.Resolve(kvp.Value, baseContext)?.ToString() ?? ""
+                    kvp => _antlrResolver.Resolve(kvp.Value, initialDatasets)
                 );
 
             Console.WriteLine($"Resolved DS Params: WorkAreaId={dsParams["WorkAreaId"]}, TaskId={dsParams["TaskId"]}");
@@ -79,13 +82,11 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 
             initialDatasets.AddRange(allWorkplanRecords);
 
-            var finalContext = new EvaluationContext(initialDatasets);
-
             // Resolve Action Item
-            var desc = resolver.Resolve(rule.ActionItemTemplate.Description, finalContext);
-            var taskId = resolver.Resolve(rule.ActionItemTemplate.TaskId, finalContext);
-            var entityId = resolver.Resolve(rule.ActionItemTemplate.EntityId, finalContext);
-            var srcSystemKey = resolver.Resolve(rule.ActionItemTemplate.SourceSystemKey, finalContext);
+            var desc = _antlrResolver.Resolve(rule.ActionItemTemplate.Description, initialDatasets);
+            var taskId = _antlrResolver.Resolve(rule.ActionItemTemplate.TaskId, initialDatasets);
+            var entityId = _antlrResolver.Resolve(rule.ActionItemTemplate.EntityId, initialDatasets);
+            var srcSystemKey = _antlrResolver.Resolve(rule.ActionItemTemplate.SourceSystemKey, initialDatasets);
 
             Console.WriteLine($"\nResolved ActionItemTemplate Fields:");
             Console.WriteLine($"Description:      {desc}");
@@ -107,7 +108,7 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 
             foreach (var kvp in testCases)
             {
-                var result = resolver.Resolve(kvp.Value, finalContext)?.ToString() ?? "null";
+                var result = _antlrResolver.Resolve(kvp.Value, initialDatasets);
                 Console.WriteLine($"{kvp.Key,-20} | {kvp.Value,-50} => {result}");
             }
 

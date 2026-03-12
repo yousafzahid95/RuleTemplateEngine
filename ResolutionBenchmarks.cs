@@ -39,9 +39,9 @@ public class ResolutionBenchmarks
 
         var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
         _dataset = new List<IDataRecord>(lemRecords);
-        _exprResolver = new ExpressionResolver();
+        _exprResolver = new RuleTemplateEngine.TemplateEngine.ExpressionResolver();
         _templateResolver = new TemplateParamResolver(_exprResolver);
-        _keyed = TemplateParamResolver.BuildKeyedDataset(_dataset);
+        _keyed = _templateResolver.BuildKeyedDataset(_dataset);
 
         _v1Direct = new TemplateParam
         {

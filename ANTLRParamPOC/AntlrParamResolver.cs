@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using RuleTemplateEngine.Interfaces;
 
 namespace RuleTemplateEngine.ANTLRParamPOC
 {
@@ -8,16 +11,17 @@ namespace RuleTemplateEngine.ANTLRParamPOC
     /// </summary>
     public class AntlrParamResolver : IAntlrParamResolver
     {
-        private readonly ExpressionResolver _resolver;
+        private readonly IAntlrExpressionResolver _resolver;
 
-        public AntlrParamResolver(ExpressionResolver resolver)
+        public AntlrParamResolver(IAntlrExpressionResolver resolver)
         {
             _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
         }
 
-        public string Resolve(string template, EvaluationContext context)
+        public string Resolve(string expression, IReadOnlyList<IDataRecord> dataset)
         {
-            var result = _resolver.Resolve(template, context);
+            var context = new EvaluationContext(dataset.ToList());
+            var result = _resolver.Resolve(expression, context);
             return result?.ToString() ?? string.Empty;
         }
     }

@@ -13,13 +13,15 @@ using RuleTemplateEngine.TemplateEngine;
 public class PocComparisonBenchmarks
 {
     private IReadOnlyList<IDataRecord> _templateParamDataset = null!;
-    private AntlrPoc.EvaluationContext _antlrContext = null!;
     private TemplateParam _templateParamDesc = null!;
     private TemplateParam _templateParamSsk = null!;
 
     // These would typically be injected via DI in a real host.
     private ITemplateParamResolver _templateParamResolver = null!;
     private AntlrPoc.IAntlrParamResolver _antlrParamResolver = null!;
+
+    [Params(100, 1000, 10000)]
+    public int Iterations { get; set; }
 
     [GlobalSetup]
     public void Setup()
@@ -62,14 +64,7 @@ public class PocComparisonBenchmarks
         initial.AddRange(workplanRecords);
         _templateParamDataset = initial;
 
-        var datasets = TransformToIDataRecord.TransformFromObject(mockEvent.WorkplanTask, "Event")
-        .Concat(TransformToIDataRecord.TransformFromObject(mockEvent, "EventMessage"))
-        .Concat(TransformToIDataRecord<FullTaskDTO>.TransformFromObject(dto, "AllWorkplan"))
-        .ToList();
-
-        _antlrContext = new AntlrPoc.EvaluationContext(datasets);
-
-        _templateParamResolver = new TemplateParamResolver(new ExpressionResolver());
+        _templateParamResolver = new TemplateParamResolver(new RuleTemplateEngine.TemplateEngine.ExpressionResolver());
 
         _antlrParamResolver = new AntlrPoc.AntlrParamResolver(
             new AntlrPoc.ExpressionResolver(new AntlrPoc.ExpressionCache()));
@@ -96,19 +91,38 @@ public class PocComparisonBenchmarks
     }
 
     [Benchmark(Description = "TemplateParam POC - Description")]
-    public string TemplateParam_Description() =>
-        _templateParamResolver.Resolve(_templateParamDesc, _templateParamDataset);
+    public void TemplateParam_Description()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _templateParamResolver.Resolve(_templateParamDesc, _templateParamDataset);
+        }
+    }
 
     [Benchmark(Description = "ANTLR POC - Description")]
-    public string Antlr_Description() =>
-        _antlrParamResolver.Resolve("Review {AllWorkplan.Entities[0].WorkAreaEntityId} for project {Event.ProjectId}", _antlrContext);
+    public void Antlr_Description()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _antlrParamResolver.Resolve("Review {Workplan.Entities[0].WorkAreaEntityId} for project {Event.ProjectId}", _templateParamDataset);
+        }
+    }
 
     [Benchmark(Description = "TemplateParam POC - SourceSystemKey")]
-    public string TemplateParam_SourceSystemKey() =>
-        _templateParamResolver.Resolve(_templateParamSsk, _templateParamDataset);
+    public void TemplateParam_SourceSystemKey()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _templateParamResolver.Resolve(_templateParamSsk, _templateParamDataset);
+        }
+    }
 
     [Benchmark(Description = "ANTLR POC - SourceSystemKey")]
-    public string Antlr_SourceSystemKey() =>
-        _antlrParamResolver.Resolve("WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}", _antlrContext);
+    public void Antlr_SourceSystemKey()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _antlrParamResolver.Resolve("WPTASK_{Workplan.Id}_{Workplan.RootTaskId}", _templateParamDataset);
+        }
+    }
 }
-

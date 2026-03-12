@@ -1,5 +1,6 @@
-using RuleTemplateEngine.Interfaces;
+using System.Collections.Generic;
 using RuleTemplateEngine.Models;
+using RuleTemplateEngine.Interfaces;
 
 namespace RuleTemplateEngine.TemplateEngine
 {
@@ -8,4 +9,3 @@ namespace RuleTemplateEngine.TemplateEngine
         string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset);
     }
 }
-

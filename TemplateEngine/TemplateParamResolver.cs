@@ -60,7 +60,7 @@ namespace RuleTemplateEngine.TemplateEngine
             return FormatSafely(param.Template, rawValues);
         }
 
-        internal static IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(IReadOnlyList<IDataRecord> datasetList)
+        public IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> BuildKeyedDataset(IReadOnlyList<IDataRecord> datasetList)
         {
             var keyed = new Dictionary<string, IReadOnlyList<IDataRecord>>(StringComparer.OrdinalIgnoreCase);
 
@@ -89,7 +89,7 @@ namespace RuleTemplateEngine.TemplateEngine
             return keyed;
         }
 
-        private static string? GetDataSourceKeyFromRecord(IDataRecord record)
+        private string? GetDataSourceKeyFromRecord(IDataRecord record)
         {
             if (record?.Columns == null || record.Columns.Length == 0)
             {
@@ -108,7 +108,7 @@ namespace RuleTemplateEngine.TemplateEngine
             return null;
         }
 
-        private static bool IsExpression(string? value)
+        private bool IsExpression(string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -121,7 +121,7 @@ namespace RuleTemplateEngine.TemplateEngine
                    && trimmed[^1] == ']';
         }
 
-        private static string FormatSafely(string template, IReadOnlyList<object?> values)
+        private string FormatSafely(string template, IReadOnlyList<object?> values)
         {
             var args = values
                 .Select(v => (object?)(v ?? string.Empty))
