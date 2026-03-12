@@ -1,99 +1,84 @@
 {
   "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc8",
   "RuleName": "WPTASK",
-  "Events": ["ExternalWorkplanTaskEvent"],
-  "ActionItemTemplateDefinition": {
+  "Events": [
+    "ExternalWorkplanTaskEvent"
+  ],
+  "ActionItemTemplate": {
     "SourceSystem": 1,
     "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
     "Description": {
-      "Params": ["[Workplan.Name]"],
-      "Template": "{0}"
+      "params": [
+        "[Workplan.Name]"
+      ],
+      "template": "{0}"
     },
     "TaskId": {
-      "Params": ["[Workplan.RootTaskId]"],
-      "Template": "{0}"
+      "params": [
+        "[Workplan.RootTaskId]"
+      ],
+      "template": "{0}"
     },
     "EntityId": {
-      "Params": ["[Workplan.Entities[0].WorkAreaEntityId]"],
-      "Template": "{0}"
+      "params": [
+        "[Workplan.Entities[0].WorkAreaEntityId]"
+      ],
+      "template": "{0}"
     },
     "SourceSystemKey": {
-      "Params": ["[Workplan.Id]"],
-      "Template": "WPTASK_{0}"
+      "params": [
+        "[Workplan.Id]"
+      ],
+      "template": "WPTASK_{0}"
     }
   },
   "Filters": {
     "DataSources": [
       {
         "Key": "AllWorkplan",
-        "DataSourceParams": {
+        "params": {
           "WorkAreaId": {
-            "Params": ["[EventMessage.WorkplanTask.WorkAreaId]"],
-            "Template": "{0}"
+            "params": [
+              "[EventMessage.WorkplanTask.WorkAreaId]"
+            ],
+            "template": "{0}"
           },
           "TaskId": {
-            "Params": ["[EventMessage.WorkplanTask.TaskId]"],
-            "Template": "{0}"
+            "params": [
+              "[EventMessage.WorkplanTask.TaskId]"
+            ],
+            "template": "{0}"
           }
         }
       }
     ],
     "ValidationRules": []
-  },
-  "Checks": {
-    "DataSources": [],
-    "ValidationRules": []
   }
 },
-
+// ANTLR Rule config example
 {
-  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc9",
-  "RuleName": "WPTASK_2D",
-  "Events": ["ExternalWorkplanTaskEvent"],
-  "ActionItemTemplateDefinition": {
-    "SourceSystem": 1,
-    "ItemDefinitionGuid": "8f2b3c4d-5e6f-7081-92a3-b4c5d6e7f912",
-    "Description": {
-      "Params": [["[Workplan.Name]"]],
-      "Template": "{0}"
-    },
-    "TaskId": {
-      "Params": [["[Workplan.RootTaskId]"]],
-      "Template": "{0}"
-    },
-    "EntityId": {
-      "Params": [["[Workplan.Entities[0].WorkAreaEntityId]"]],
-      "Template": "{0}"
-    },
-    "SourceSystemKey": {
-      "Params": [
-        ["[Workplan.Id]", "[EventData.WorkplanTask.Id]"],
-        ["[EventData.WorkplanTask.WorkAreaId]", "[EventData.WorkplanTask.WorkareaId]"]
-      ],
-      "Template": "WPTASK_{0}_{1}"
-    }
+  "_id": "51691d06-358b-4bb5-9f3b-841fcc4fddc8",
+  "RuleName": "WPTASK",
+  "Events": [
+    "ExternalWorkplanTaskEvent"
+  ],
+  "ActionItemTemplate": {
+    "Description": "{AllWorkplan.Name}",
+    "TaskId": "{AllWorkplan.RootTaskId}",
+    "EntityId": "{AllWorkplan.Entities[0].WorkAreaEntityId}",
+    "SourceSystemKey": "WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}",
+    "ItemDefinitionGuid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "SourceSystem": 1
   },
   "Filters": {
     "DataSources": [
       {
         "Key": "AllWorkplan",
         "DataSourceParams": {
-          "WorkAreaId": {
-            "Params": [["[EventMessage.WorkplanTask.WorkAreaId]"]],
-            "Template": "{0}"
-          },
-          "TaskId": {
-            "Params": [["[EventMessage.WorkplanTask.TaskId]"]],
-            "Template": "{0}"
-          }
-        },
-        "Params": {}
+          "WorkAreaId": "{EventMessage.WorkplanTask.WorkAreaId}",
+          "TaskId": "{EventMessage.WorkplanTask.TaskId}"
+        }
       }
-    ],
-    "ValidationRules": []
-  },
-  "Checks": {
-    "DataSources": [],
-    "ValidationRules": []
+    ]
   }
 }
