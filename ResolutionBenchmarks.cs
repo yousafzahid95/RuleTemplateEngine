@@ -3,14 +3,19 @@ using RuleTemplateEngine.Dtos;
 using RuleTemplateEngine.Helpers;
 using RuleTemplateEngine.Interfaces;
 using RuleTemplateEngine.Models;
+using RuleTemplateEngine.TemplateEngine;
 
 [MemoryDiagnoser]
 public class ResolutionBenchmarks
 {
     private IReadOnlyList<IDataRecord> _dataset = null!;
     private TemplateParam _v1Direct = null!;
-    private TemplateParamV2 _v2Single = null!;
-    private TemplateParamV2 _v2Deep = null!;
+    private IReadOnlyDictionary<string, IReadOnlyList<IDataRecord>> _keyed = null!;
+    private string _exprFirst = null!;
+    private string _exprMiddle = null!;
+    private string _exprIndexed = null!;
+    private IExpressionResolver _exprResolver = null!;
+    private TemplateParamResolver _templateResolver = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -34,44 +39,40 @@ public class ResolutionBenchmarks
 
         var lemRecords = TransformToIDataRecord<EntityWorkAreaLevelDetailIntegrationDto>.TransformFromList(lemDtos, "LEM").ToList();
         _dataset = new List<IDataRecord>(lemRecords);
+        _exprResolver = new RuleTemplateEngine.TemplateEngine.ExpressionResolver();
+        _templateResolver = new TemplateParamResolver(_exprResolver);
+        _keyed = _templateResolver.BuildKeyedDataset(_dataset);
 
         _v1Direct = new TemplateParam
         {
             Template = "A002IR_{0}_{1}",
             Params = { "[LEM.EntityId]", "[LEM.WorkAreaId]" }
         };
-
-        _v2Single = new TemplateParamV2
-        {
-            Template = "A002IR_{0}_{1}",
-            Params = new List<List<string>>
-            {
-                new() { "[LEM.EntityId]" },
-                new() { "[LEM.WorkAreaId]" }
-            }
-        };
-
-        _v2Deep = new TemplateParamV2
-        {
-            Template = "A002IR_{0}_{1}",
-            Params = new List<List<string>>
-            {
-                new() { "[LEM.Missing1]", "[LEM.Missing2]", "[LEM.Missing3]", "[LEM.Missing4]", "[LEM.EntityId]" },
-                new() { "[LEM.Nope1]", "[LEM.Nope2]", "[LEM.Nope3]", "[LEM.Nope4]", "[LEM.WorkAreaId]" }
-            }
-        };
+        _exprFirst = "[LEM.EntityId]";
+        _exprMiddle = "[LEM.WorkAreaId]";
+        _exprIndexed = "[LEM[10].ProjectId]";
+       
     }
 
     [Benchmark]
     public string V1_Flat_2Params() =>
-        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(_v1Direct, _dataset);
+        _templateResolver.Resolve(_v1Direct, _dataset);
 
-    [Benchmark]
-    public string V2_1ExprPerPlaceholder() =>
-        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(_v2Single, _dataset);
+    [Benchmark(Description = "String resolver - simple path")]
+    public object? StringResolver_Simple() =>
+        _exprResolver.Resolve(_exprFirst, _keyed);
 
-    [Benchmark]
-    public string V2_5ExprPerPlaceholder() =>
-        RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.ResolveV2(_v2Deep, _dataset);
+    // [Benchmark(Description = "ANTLR resolver - simple path")]
+    // public object? AntlrResolver_Simple() =>
+    //     ExpressionResolverAntlr.Resolve(_exprFirst, _keyed);
+
+    [Benchmark(Description = "String resolver - indexed path")]
+    public object? StringResolver_Indexed() =>
+        _exprResolver.Resolve(_exprIndexed, _keyed);
+
+    // [Benchmark(Description = "ANTLR resolver - indexed path")]
+    // public object? AntlrResolver_Indexed() =>
+    //     ExpressionResolverAntlr.Resolve(_exprIndexed, _keyed);
+
 }
 

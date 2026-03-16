@@ -8,14 +8,13 @@ namespace RuleTemplateEngine
 {
     public class LemDataSourceAdapter : IDataSourceAdapter
     {
-        /// <inheritdoc />
-        /// <remarks>
-        /// <paramref name="dataset"/> convention:
-        /// - 1 record: dataset[0] = event body only → keyed as "Event" ([Event.ProjectId] etc.).
-        /// - 2+ records: dataset[0] = EventMessage (message envelope), dataset[1] = EventData (Body) → keyed as "EventMessage" and "EventData"; "Event" is an alias for EventData for backward compatibility.
-        /// LEM records are returned by the adapter; the caller appends them to the same list.
-        /// Resolve uses only this list (keys are derived from position inside the engine).
-        /// </remarks>
+        private readonly ITemplateParamResolver _templateResolver;
+
+        public LemDataSourceAdapter(ITemplateParamResolver templateResolver)
+        {
+            _templateResolver = templateResolver ?? throw new ArgumentNullException(nameof(templateResolver));
+        }
+
         public async Task<IEnumerable<IDataRecord>> GetRecordsAsync(
             object eventData,
             IDictionary<string, TemplateParam> dataSourceParams,
@@ -47,7 +46,7 @@ namespace RuleTemplateEngine
             return await GetWorkAreaEntityAsync(parameters).ConfigureAwait(false);
         }
 
-        private static Guid ResolveGuidParam(
+        private Guid ResolveGuidParam(
             string key,
             IDictionary<string, TemplateParam> dataSourceParams,
             IReadOnlyList<IDataRecord> dataset)
@@ -55,7 +54,7 @@ namespace RuleTemplateEngine
             if (!dataSourceParams.TryGetValue(key, out var templateParam))
                 return Guid.Empty;
 
-            var resolved = RuleTemplateEngine.TemplateEngine.RuleTemplateEngine.Resolve(templateParam, dataset);
+            var resolved = _templateResolver.Resolve(templateParam, dataset);
             return Guid.TryParse(resolved, out var guid) ? guid : Guid.Empty;
         }
 
