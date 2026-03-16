@@ -19,30 +19,30 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             Console.WriteLine("=== Starting ANTLR POC ===");
 
             var ruleJson = @"
-{
-  ""_id"": ""51691d06-358b-4bb5-9f3b-841fcc4fddc8"",
-  ""RuleName"": ""WPTASK"",
-  ""Events"": [""ExternalWorkplanTaskEvent""],
-  ""ActionItemTemplate"": {
-    ""Description"":        ""{AllWorkplan.Name}"",
-    ""TaskId"":             ""{AllWorkplan.RootTaskId}"",
-    ""EntityId"":           ""{AllWorkplan.Entities[0].WorkAreaEntityId}"",
-    ""SourceSystemKey"":    ""WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}"",
-    ""ItemDefinitionGuid"": ""3fa85f64-5717-4562-b3fc-2c963f66afa6"",
-    ""SourceSystem"":       1
-  },
-  ""Filters"": {
-    ""DataSources"": [
-      {
-        ""Key"": ""AllWorkplan"",
-        ""DataSourceParams"": {
-          ""WorkAreaId"": ""{EventMessage.WorkplanTask.WorkAreaId}"",
-          ""TaskId"":     ""{EventMessage.WorkplanTask.TaskId}""
-        }
-      }
-    ]
-  }
-}";
+            {
+              ""_id"": ""51691d06-358b-4bb5-9f3b-841fcc4fddc8"",
+              ""RuleName"": ""WPTASK"",
+              ""Events"": [""ExternalWorkplanTaskEvent""],
+              ""ActionItemTemplate"": {
+                ""Description"":        ""{AllWorkplan.Name}"",
+                ""TaskId"":             ""{AllWorkplan.RootTaskId}"",
+                ""EntityId"":           ""{AllWorkplan.Entities[0].WorkAreaEntityId}"",
+                ""SourceSystemKey"":    ""WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}"",
+                ""ItemDefinitionGuid"": ""3fa85f64-5717-4562-b3fc-2c963f66afa6"",
+                ""SourceSystem"":       1
+              },
+              ""Filters"": {
+                ""DataSources"": [
+                  {
+                    ""Key"": ""AllWorkplan"",
+                    ""DataSourceParams"": {
+                      ""WorkAreaId"": ""{EventMessage.WorkplanTask.WorkAreaId}"",
+                      ""TaskId"":     ""{EventMessage.WorkplanTask.TaskId}""
+                    }
+                  }
+                ]
+              }
+            }";
             var rule = Newtonsoft.Json.JsonConvert.DeserializeObject<RuleModel>(ruleJson);
 
             // Mock Event

@@ -11,6 +11,7 @@ namespace RuleTemplateEngine.Models
         public ActionItemTemplate ActionItemTemplate { get; set; }
         public Filters Filters { get; set; }
         public Checks Checks { get; set; }
+        public bool PublishEventToDataset { get; set; }
     }
 
     public class ActionItemTemplate

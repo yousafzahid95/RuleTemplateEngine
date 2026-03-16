@@ -7,7 +7,6 @@ Draft
 Proceed with **Option 2 (ANTLR)**
 
 ## Proposed by
-Antigravity (AI Architect)
 
 ## Context and Problem Statement
 The Insights Engine currently relies on hardcoded parameter-resolution logic embedded in multiple services and adapters (e.g., `LemDataSourceAdapter`, `SDTValidationService`). This identifies several systemic problems:
@@ -125,6 +124,7 @@ public string Resolve(TemplateParam param, IReadOnlyList<IDataRecord> dataset)
 - **Low Readability**: Placeholders like `{0}` are detached from their source, making large templates hard to manage.
 - **Limited Logic**: While it supports sequential fallbacks for the primary placeholder, it does not support inline null-coalescing (`??`) or complex indexing within the template string itself.
 - **Configuration Overhead**: Requires complex JSON structures for simple strings.
+- **Breaking Change**: **Warning: Implementing this approach requires a fundamental change to the existing rule structure**, switching from simple strings to complex recursive objects.
 
 ---
 
@@ -160,17 +160,57 @@ Use ANTLR to parse and evaluate parameters defined in the rule configuration usi
 ```
 
 ### Implementation Details
-The ANTLR approach uses a formal grammar (`RuleTemplate.g4`) and a visitor pattern to traverse the parse tree. It is orchestrated by [AntlrParamResolver.cs](file:///c:/CiklumWork/RuleTemplateEngine/ANTLRParamPOC/AntlrParamResolver.cs).
+The ANTLR approach uses a formal grammar to define the template structure. It is split into a Lexer for tokenization and a Parser for structural evaluation.
+
+#### RuleTemplateLexer.g4
+```antlr
+lexer grammar RuleTemplateLexer;
+
+TEXT          : ~[{\\]+ ;
+ESCAPED_BRACE : '\\{' ;
+ANY_OTHER_SLASH : '\\' ;
+OPEN_BRACE    : '{' -> pushMode(EXPR_MODE) ;
+
+mode EXPR_MODE;
+CLOSE_BRACE   : '}' -> popMode ;
+NULL_COALESCE : '??' ;
+DOT           : '.' ;
+LBRACK        : '[' ;
+RBRACK        : ']' ;
+IDENTIFIER    : [a-zA-Z_][a-zA-Z_0-9]* ;
+INT_LITERAL   : [0-9]+ ;
+EXPR_WS       : [ \t]+ -> skip ;
+```
+
+#### RuleTemplateParser.g4
+```antlr
+parser grammar RuleTemplateParser;
+options { tokenVocab = RuleTemplateLexer; }
+
+template
+    : templatePart* EOF
+    ;
+
+templatePart
+    : TEXT                                  #LiteralPart
+    | ANY_OTHER_SLASH                       #LiteralSlashPart
+    | ESCAPED_BRACE                         #EscapedBrace
+    | OPEN_BRACE expression CLOSE_BRACE     #InterpolationPart
+    ;
+
+expression
+    : accessor (NULL_COALESCE accessor)*    #NullCoalesceExpr
+    | accessor                              #AccessorExpr
+    ;
+
+accessor
+    : IDENTIFIER ( DOT IDENTIFIER | LBRACK INT_LITERAL RBRACK )*
+    ;
+```
+
+The approach uses a visitor pattern to traverse the parse tree and resolve values against the dataset via an `EvaluationContext`.
 
 ```csharp
-// Orchestrator loop
-public string Resolve(string expression, IReadOnlyList<IDataRecord> dataset)
-{
-    var context = new EvaluationContext(dataset.ToList());
-    var result = _resolver.Resolve(expression, context);
-    return result?.ToString() ?? string.Empty;
-}
-
 // Resolution logic with Cache
 public object? Resolve(string expression, EvaluationContext context)
 {
@@ -180,7 +220,6 @@ public object? Resolve(string expression, EvaluationContext context)
 }
 ```
 
-- Grammar defined in `RuleTemplate.g4`.
 - Employs a thread-safe [ExpressionCache.cs](file:///c:/CiklumWork/RuleTemplateEngine/ANTLRParamPOC/ExpressionCache.cs) to avoid redundant parsing.
 
 ### Pros
@@ -188,6 +227,7 @@ public object? Resolve(string expression, EvaluationContext context)
 - **Powerful Logic**: Built-in support for null-coalescing, nested arrays, and logical operations.
 - **Extensible**: The grammar can be easily extended to support math, functions, or transformations without changing the core engine architecture.
 - **Developer Experience**: Familiar syntax similar to C# interpolated strings.
+- **Non-Breaking**: **The rule structure remains consistent.** It enhances the existing string-based values with interpolation capabilities.
 
 ### Cons
 - **Dependency**: Requires the ANTLR runtime library.
@@ -219,15 +259,40 @@ Below are the official results from **BenchmarkDotNet** across various iteration
 ---
 
 ## Summary Comparison
-*Scores using Fibonacci (1 - Bad, 13 - Excellent)*
+*Scores using Fibonacci (1 - Bad (Low), 13 - Excellent (High))*
 
-| Criteria | Custom Solution | ANTLR |
-| :--- | :--- | :--- |
-| **Performance** | 13 | 8 |
-| **Extensibility** | 3 | 13 |
-| **Readability** | 5 | 13 |
-| **Reliability** | 8 | 13 |
-| **Config Simplicity** | 3 | 13 |
+| Criteria | Custom Solution | ANTLR | Comments / Methodology |
+| :--- | :---: | :---: | :--- |
+| **Performance** | 13 | 8 | Custom is faster as it avoids the overhead of visitor pattern and tree traversal. |
+| **Extensibility** | 3 | 13 | ANTLR grammar allows adding math, functions, and logic easily without changing C# code. |
+| **Json format readability** | 5 | 13 | ANTLR inline strings are self-documenting; Custom `{0}` detached from params is hard to read. |
+| **Reliability** | 8 | 13 | Formal ANTLR grammar ensures consistent parsing that scale with complexity. |
+| **Config Simplicity** | 3 | 13 | ANTLR rule config is a single string; Custom requires complex nested object structures. |
+| **Debugability** | 13 | 8 | Custom is vanilla C# debugging; ANTLR requires understanding the visitor and grammar tree. |
+| **Maintainability cost** | 13 | 8 | Custom is low-level C#; ANTLR requires maintaining grammar files and runtime dependencies. |
+| **TOTAL SCORE** | **58** | **76** | **Decision based on long-term scalability and business readability.** |
 
 ### Final Recommendation
-We recommend **Option 2 (ANTLR)**. While the custom solution is slightly faster in raw micro-benchmarks, ANTLR provides the readability and logical power required for high-complexity rules while maintaining throughput that exceeds our production requirements.
+We recommend **Option 2 (ANTLR)**. While the custom solution is slightly faster in raw micro-benchmarks, ANTLR provides the readability and logical power required for high-complexity rules while maintaining throughput that exceeds our production requirements and avoiding breaking structural changes.
+
+---
+
+## Stakeholder Feedback Q&A
+
+### 1. How does rule configuration differ between approaches?
+- **ANTLR (Option 2)**: Uses "Template Strings". Business users can read the target string directly: `"TaskId: {AllWorkplan.RootTaskId}"`. The structure matches standard JSON strings.
+- **Custom (Option 1)**: Uses "Recursive Objects". Every field becomes an object with `params` (list of paths) and `template` (format string). This leads to highly verbose and less readable JSON configs.
+
+### 2. What is the maintenance complexity?
+- **Grammar Updates**: Very rare. The grammar only needs updates if the *language features* change (e.g., adding mathematical operators like `+` or `-`). 99% of business changes are made in the Rule JSON, not the Code/Grammar.
+- **Rule Complexity**: ANTLR handles deep paths (`A.B[0].C`) and fallbacks (`A ?? B`) natively. The Custom solution requires the developer to keep adding manual C# logic to handle these edge cases.
+- **Debugging**: ANTLR includes basic error handling for malformed templates. Since resolutions are stateless, debugging a rule simply involves checking if the provided path exists in the event data.
+
+### 3. How will rule testing be affected?
+- **Simplified Testing**: With ANTLR, you can test a rule by asserting against the final string result. Example: `Assert.AreEqual("Entity_123", resolvedString)`. 
+- **Mocking**: Testing individual "interpolations" is straightforward as they are self-contained. You don't need to rebuild the entire recursive object tree to test a single field change.
+
+### 4. What functionality is supported in the Custom Resolver?
+- Simple property path resolution (e.g., `DataSource.Prop`), sequential array-based fallbacks, and **nested array lookups** (e.g., `Data[0].Items[1]`). 
+- **Nested array lookups are supported by both approaches**, as the underlying dataset resolution logic handles the path evaluation.
+- It does **not** support inline logical operations (e.g., `??`), mathematical transforms, or complex conditional formatting within the template itself without adding manual code bloat.
