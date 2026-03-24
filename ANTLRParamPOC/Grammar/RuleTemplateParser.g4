@@ -13,8 +13,12 @@ templatePart
     ;
 
 expression
-    : accessor (NULL_COALESCE accessor)*    #NullCoalesceExpr
-    | accessor                              #AccessorExpr
+    : expression NULL_COALESCE expression          # NullCoalesceExpr
+    | expression EQ expression                     # EqualityExpr
+    | expression OR expression                     # LogicalOrExpr
+    | expression QMARK expression COLON expression # TernaryExpr
+    | accessor                                     # AccessorExpr
+    | STRING_LITERAL                               # StringLiteralExpr
     ;
 
 accessor

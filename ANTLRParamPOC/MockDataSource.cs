@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using RuleTemplateEngine.Dtos;
 using RuleTemplateEngine.Events;
 using RuleTemplateEngine.Helpers;
@@ -83,11 +78,44 @@ namespace RuleTemplateEngine.ANTLRParamPOC
                 CreatedBy = Guid.NewGuid(),
                 Entities = new[] 
                 {
+                    new EntityInfoDTO { WorkAreaEntityId = Guid.Parse("11112222-3333-4444-5555-666677778888") },
+                    new EntityInfoDTO { WorkAreaEntityId = Guid.Parse("11111111-1111-1111-1111-111111111111") },
+                    new EntityInfoDTO { WorkAreaEntityId = Guid.Parse("22222222-2222-2222-2222-222222222222") },
+                },
+            };
+
+            var responseData1 = new FullTaskDTO
+            {
+                Id = Guid.NewGuid(),
+                WorkAreaId = workAreaId,
+                RootTaskId = Guid.NewGuid(),
+                Name = "Mocked Target Task",
+                Description = "This is a mocked target task from the simulated service.",
+                CreatedOn = DateTimeOffset.UtcNow,
+                CreatedBy = Guid.NewGuid(),
+                Entities = new[]
+                {
                     new EntityInfoDTO { WorkAreaEntityId = Guid.Parse("11112222-3333-4444-5555-666677778888") }
                 }
             };
 
-            var records = TransformToIDataRecord<FullTaskDTO>.TransformFromObject(responseData, "AllWorkplan");
+            var responseData2 = new FullTaskDTO
+            {
+                Id = Guid.NewGuid(),
+                WorkAreaId = workAreaId,
+                RootTaskId = Guid.NewGuid(),
+                Name = "Mocked Target Task",
+                Description = "This is a mocked target task from the simulated service.",
+                CreatedOn = DateTimeOffset.UtcNow,
+                CreatedBy = Guid.NewGuid(),
+                Entities = new[]
+                {
+                    new EntityInfoDTO { WorkAreaEntityId = Guid.Parse("11112222-3333-4444-5555-666677778888") }
+                }
+            };
+            var respObjs = new List<FullTaskDTO> { responseData, responseData1, responseData2 };
+            var container = new { AllWorkplan = respObjs };
+            var records = TransformToIDataRecord<FullTaskDTO>.TransformFromList(respObjs, "AllWorkplan");
             return await Task.FromResult(records);
         }
     }

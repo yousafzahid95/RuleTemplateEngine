@@ -17,8 +17,18 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             _records = records;
         }
 
-        public object? Resolve(string fullPath)
+        public object? Resolve(string fullPath) //AllWorkplan.Entity.Id -> AllWorkplan, Entity, Id  AllWorkplan[0].Entities[0].Id
         {
+            foreach (var record in _records)
+            {
+                if (record == null)
+                    continue;
+
+                var value = record[fullPath];
+                if (value != null)
+                    return value;
+            }
+
             var parts = fullPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0)
                 return null;
@@ -46,10 +56,10 @@ namespace RuleTemplateEngine.ANTLRParamPOC
                 }
             }
 
-            return (key, 0);
+            return (key, 0); //Allworkplan, 0, Correct index back
         }
 
-        private object? ResolveFromDataset(string dataSourceKey, int index, string[] path)
+        private object? ResolveFromDataset(string dataSourceKey, int index, string[] path) // Multiple objects in IDataRecord -> filter by datasource key eg AllWorkplan.
         {
             // filter records belonging to the datasource
             var datasetRecords = _records

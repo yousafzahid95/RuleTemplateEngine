@@ -116,9 +116,9 @@ namespace RuleTemplateEngine.TemplateParamPOC
                 if (rawRecords.Count > 0)
                 {
                     var firstRec = rawRecords[0];
-                    var idStr = firstRec["AllWorkplan.Id"]?.ToString();
-                    var waStr = firstRec["AllWorkplan.WorkAreaId"]?.ToString();
-                    var rootStr = firstRec["AllWorkplan.RootTaskId"]?.ToString();
+                    var idStr = firstRec["AllWorkplan[0].Id"]?.ToString();
+                    var waStr = firstRec["AllWorkplan[0].WorkAreaId"]?.ToString();
+                    var rootStr = firstRec["AllWorkplan[0].RootTaskId"]?.ToString();
                     
                     var typedMock = new FullTaskDTO
                     {

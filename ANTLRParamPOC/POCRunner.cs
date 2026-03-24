@@ -24,10 +24,10 @@ namespace RuleTemplateEngine.ANTLRParamPOC
               ""RuleName"": ""WPTASK"",
               ""Events"": [""ExternalWorkplanTaskEvent""],
               ""ActionItemTemplate"": {
-                ""Description"":        ""{AllWorkplan.Name}"",
-                ""TaskId"":             ""{AllWorkplan.RootTaskId}"",
-                ""EntityId"":           ""{AllWorkplan.Entities[0].WorkAreaEntityId}"",
-                ""SourceSystemKey"":    ""WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}"",
+                ""Description"":        ""{AllWorkplan[0].Name}"",
+                ""TaskId"":             ""{AllWorkplan[0].RootTaskId}"",
+                ""EntityId"":           ""{AllWorkplan[0].Entities[2].WorkAreaEntityId}"",
+                ""SourceSystemKey"":    ""WPTASK_{AllWorkplan[0].Id}_{AllWorkplan[1].RootTaskId}"",
                 ""ItemDefinitionGuid"": ""3fa85f64-5717-4562-b3fc-2c963f66afa6"",
                 ""SourceSystem"":       1
               },
@@ -84,7 +84,7 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 
             // Resolve Action Item
             var desc = _antlrResolver.Resolve(rule.ActionItemTemplate.Description, initialDatasets);
-            var taskId = _antlrResolver.Resolve(rule.ActionItemTemplate.TaskId, initialDatasets);
+            var taskId = _antlrResolver.Resolve(rule.ActionItemTemplate.TaskId, initialDatasets); // AllWorkplan 
             var entityId = _antlrResolver.Resolve(rule.ActionItemTemplate.EntityId, initialDatasets);
             var srcSystemKey = _antlrResolver.Resolve(rule.ActionItemTemplate.SourceSystemKey, initialDatasets);
 
@@ -98,10 +98,10 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             var testCases = new Dictionary<string, string>
             {
                 { "Static text", "my static value" },
-                { "Single path", "{AllWorkplan.RootTaskId}" },
+                { "Single path", "{AllWorkplan[0].RootTaskId}" },
                 { "Event path", "{Event.TaskId}" },
-                { "Mixed text + path", "WPTASK_{AllWorkplan.Id}_{AllWorkplan.RootTaskId}" },
-                { "Array index", "{AllWorkplan.Entities[0].WorkAreaEntityId}" },
+                { "Mixed text + path", "WPTASK_{AllWorkplan[0].Id}_{AllWorkplan[0].RootTaskId}" },
+                { "Array index", "{AllWorkplan[0].Entities[0].WorkAreaEntityId}" },
                 { "Fallback", "{AllWorkplan.MissingProperty ?? Event.WorkAreaId}" },
                 { "Literal brace", "value \\{not a ref\\}" }
             };

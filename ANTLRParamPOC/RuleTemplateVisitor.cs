@@ -15,13 +15,17 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             _context = context;
         }
 
+        //WPTASK_{Event.Id ?? Event.WorkareaId}_{Event.WorkAreaId}
+
+       
+
         // Concatenates all parts into final string
         public override object? VisitTemplate(RuleTemplateParser.TemplateContext ctx)
         {
             var sb = new StringBuilder();
             foreach (var part in ctx.templatePart())
                 sb.Append(Visit(part));
-            return sb.ToString();
+            return sb.ToString();   //WPTASK_{RESOLVED GUID}_{RESOLVED GUID}
         }
 
         // Plain text → return as-is
@@ -51,15 +55,40 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             return VisitAccessorNode(accessor);
         }
 
-        // {A.X ?? B.Y} → try each accessor, return first non-null
+        // {A.X ?? B.Y} 
         public override object? VisitNullCoalesceExpr(RuleTemplateParser.NullCoalesceExprContext ctx)
         {
-            foreach (var accessor in ctx.accessor())
-            {
-                var result = VisitAccessorNode(accessor);
-                if (result is not null) return result;
-            }
-            return null;
+            var left = Visit(ctx.expression(0));
+            if (left is not null) return left;
+            return Visit(ctx.expression(1));
+        }
+
+        public override object? VisitEqualityExpr(RuleTemplateParser.EqualityExprContext ctx)
+        {
+            var left = Visit(ctx.expression(0));
+            var right = Visit(ctx.expression(1));
+            return string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        public override object? VisitLogicalOrExpr(RuleTemplateParser.LogicalOrExprContext ctx)
+        {
+            var left = Visit(ctx.expression(0));
+            if (left is bool bLeft && bLeft) return true;
+            return Visit(ctx.expression(1));
+        }
+
+        public override object? VisitTernaryExpr(RuleTemplateParser.TernaryExprContext ctx)
+        {
+            var condition = Visit(ctx.expression(0));
+            if (condition is bool bCond && bCond)
+                return Visit(ctx.expression(1));
+            return Visit(ctx.expression(2));
+        }
+
+        public override object? VisitStringLiteralExpr(RuleTemplateParser.StringLiteralExprContext ctx)
+        {
+            var text = ctx.GetText();
+            return text.Substring(1, text.Length - 2); // strip quotes
         }
 
         private object? VisitAccessorNode(RuleTemplateParser.AccessorContext accessor)
