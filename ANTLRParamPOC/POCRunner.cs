@@ -16,6 +16,12 @@ namespace RuleTemplateEngine.ANTLRParamPOC
 
         public async Task Run()
         {
+            await RunWorkplanScenario();
+            await RunMemberRelationScenario();
+        }
+
+        private async Task RunWorkplanScenario()
+        {
             Console.WriteLine("=== Starting ANTLR POC ===");
 
             var ruleJson = @"
