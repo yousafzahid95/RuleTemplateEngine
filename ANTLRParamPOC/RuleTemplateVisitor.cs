@@ -85,6 +85,9 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             return Visit(ctx.expression(2));
         }
 
+        public override object? VisitParenthesizedExpr(RuleTemplateParser.ParenthesizedExprContext ctx)
+            => Visit(ctx.expression());
+
         public override object? VisitStringLiteralExpr(RuleTemplateParser.StringLiteralExprContext ctx)
         {
             var text = ctx.GetText();

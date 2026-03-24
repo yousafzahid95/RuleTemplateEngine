@@ -12,6 +12,8 @@ EQ            : '==' ;
 OR            : '||' ;
 QMARK         : '?' ;
 COLON         : ':' ;
+LPAREN        : '(' ;
+RPAREN        : ')' ;
 DOT           : '.' ;
 LBRACK        : '[' ;
 RBRACK        : ']' ;

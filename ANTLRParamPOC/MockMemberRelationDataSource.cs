@@ -27,22 +27,38 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             IReadOnlyList<IDataRecord> dataset, 
             CancellationToken cancellationToken = default)
         {
-            // For testing the resolved ternary/logical expression
-            var resolvedEntityId = "<Not Resolved>";
-            if (resolvedParams != null && resolvedParams.TryGetValue("EntityId", out var eid))
+            if (eventData is not ExternalMemberRelationEventMessage eventMessage)
             {
-                resolvedEntityId = eid;
+                throw new InvalidOperationException(
+                    $"Event data must be of type {nameof(ExternalMemberRelationEventMessage)}.");
             }
+
+            if (!string.Equals(eventMessage.EventType, "RelationCreated", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(eventMessage.EventType, "RelationDeleted", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported member relation event type '{eventMessage.EventType}'.");
+            }
+
+            if (resolvedParams is null || !resolvedParams.TryGetValue("EntityId", out var resolvedEntityId) ||
+                string.IsNullOrWhiteSpace(resolvedEntityId))
+            {
+                throw new InvalidOperationException(
+                    "Failed to resolve required parameter 'EntityId' for member relation lookup.");
+            }
+
+            resolvedParams.TryGetValue("WorkareaId", out var resolvedWorkareaId);
 
             var mockData = new
             {
                 FetchedRelationId = Guid.NewGuid(),
+                RequestedEventType = eventMessage.EventType,
                 TargetEntityId = resolvedEntityId,
+                WorkareaId = resolvedWorkareaId ?? string.Empty,
                 Status = "Active"
             };
 
-            var container = new { MemberRelation = new[] { mockData } };
-            var records = TransformToIDataRecord.TransformFromObject(container, "");
+            var records = TransformToIDataRecord.TransformFromObject(mockData, "MemberRelation");
 
             return await Task.FromResult(records);
         }

@@ -2,6 +2,7 @@ using RuleTemplateEngine.Events;
 using RuleTemplateEngine.Interfaces;
 using RuleTemplateEngine.Models;
 using RuleTemplateEngine.Helpers;
+using Newtonsoft.Json;
 
 namespace RuleTemplateEngine.ANTLRParamPOC
 {
@@ -49,7 +50,8 @@ namespace RuleTemplateEngine.ANTLRParamPOC
                 ]
               }
             }";
-            var rule = Newtonsoft.Json.JsonConvert.DeserializeObject<RuleModel>(ruleJson);
+            var rule = JsonConvert.DeserializeObject<RuleModel>(ruleJson)
+                ?? throw new InvalidOperationException("Failed to deserialize workplan rule.");
 
             // Mock Event
             var mockEvent = new ExternalWorkplanTaskEvent
@@ -119,6 +121,118 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             }
 
             Console.WriteLine("=== End of POC ===");
+        }
+
+        private async Task RunMemberRelationScenario()
+        {
+            Console.WriteLine("\n=== Starting ExternalMemberRelationEventMessage Scenario ===");
+
+            var ruleJson = @"
+            {
+              ""_id"": ""d4fb6d54-7fd2-4b20-a5d8-2a1eb72dc0c5"",
+              ""RuleName"": ""MEMBER_RELATION"",
+              ""Events"": [""ExternalMemberRelationEventMessage""],
+              ""ActionItemTemplate"": {
+                ""Description"":        ""Member relation for {MemberRelation.TargetEntityId} ({MemberRelation.RequestedEventType})"",
+                ""TaskId"":             ""{MemberRelation.FetchedRelationId}"",
+                ""EntityId"":           ""{MemberRelation.TargetEntityId}"",
+                ""SourceSystemKey"":    ""MEMREL_{MemberRelation.TargetEntityId}_{MemberRelation.RequestedEventType}"",
+                ""ItemDefinitionGuid"": ""3fa85f64-5717-4562-b3fc-2c963f66afa6"",
+                ""SourceSystem"":       1
+              },
+              ""Filters"": {
+                ""DataSources"": [
+                  {
+                    ""Key"": ""MemberRelation"",
+                    ""DataSourceParams"": {
+                      ""WorkareaId"": ""{Event.WorkareaId}"",
+                      ""EntityId"":   ""{(EventMessage.EventType == \""RelationCreated\"" || EventMessage.EventType == \""RelationDeleted\"") ? (Event.ParentEntityId ?? Event.EntityId) : Event.EntityId}""
+                    }
+                  }
+                ]
+              }
+            }";
+
+            var rule = JsonConvert.DeserializeObject<RuleModel>(ruleJson)
+                ?? throw new InvalidOperationException("Failed to deserialize member relation rule.");
+
+            var scenarios = new[]
+            {
+                new
+                {
+                    Name = "RelationCreated uses ParentEntityId",
+                    EventType = "RelationCreated",
+                    WorkareaId = Guid.NewGuid(),
+                    EntityId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                    ParentEntityId = (Guid?)Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                },
+                new
+                {
+                    Name = "RelationDeleted falls back to EntityId",
+                    EventType = "RelationDeleted",
+                    WorkareaId = Guid.NewGuid(),
+                    EntityId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    ParentEntityId = (Guid?)null
+                }
+            };
+
+            var adapter = new MockMemberRelationDataSource();
+
+            foreach (var scenario in scenarios)
+            {
+                var memberRelationEvent = new MemberRelationExternalEvent
+                {
+                    WorkareaId = scenario.WorkareaId,
+                    EntityId = scenario.EntityId,
+                    ParentEntityId = scenario.ParentEntityId
+                };
+
+                var eventMessage = new ExternalMemberRelationEventMessage
+                {
+                    EventType = scenario.EventType,
+                    Body = JsonConvert.SerializeObject(memberRelationEvent)
+                };
+
+                var initialDatasets = BuildMemberRelationDatasets(eventMessage);
+
+                var dsParams = rule.Filters.DataSources[0].DataSourceParams
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => _antlrResolver.Resolve(kvp.Value, initialDatasets));
+
+                var memberRelationRecordsArray = await adapter.GetRecordsPOCAsync(
+                    eventMessage,
+                    dsParams,
+                    initialDatasets,
+                    CancellationToken.None);
+
+                var memberRelationRecords = memberRelationRecordsArray.ToList();
+                initialDatasets.AddRange(memberRelationRecords);
+
+                var description = _antlrResolver.Resolve(rule.ActionItemTemplate.Description, initialDatasets);
+                var entityId = _antlrResolver.Resolve(rule.ActionItemTemplate.EntityId, initialDatasets);
+                var sourceSystemKey = _antlrResolver.Resolve(rule.ActionItemTemplate.SourceSystemKey, initialDatasets);
+
+                Console.WriteLine($"\nScenario:         {scenario.Name}");
+                Console.WriteLine($"Resolved EntityId:{dsParams["EntityId"]}");
+                Console.WriteLine($"Description:      {description}");
+                Console.WriteLine($"EntityId:         {entityId}");
+                Console.WriteLine($"SourceSystemKey:  {sourceSystemKey}");
+            }
+
+            Console.WriteLine("=== End of ExternalMemberRelationEventMessage Scenario ===");
+        }
+
+        private static List<IDataRecord> BuildMemberRelationDatasets(ExternalMemberRelationEventMessage eventMessage)
+        {
+            var typedEvent = JsonConvert.DeserializeObject<MemberRelationExternalEvent>(eventMessage.Body)
+                ?? throw new InvalidOperationException("Failed to deserialize member relation event body.");
+
+            var datasets = new List<IDataRecord>();
+            datasets.AddRange(TransformToIDataRecord.TransformFromObject(typedEvent, "Event"));
+            datasets.AddRange(TransformToIDataRecord.TransformFromObject(eventMessage, "EventMessage"));
+
+            return datasets;
         }
     }
 }

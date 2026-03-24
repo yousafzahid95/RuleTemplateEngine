@@ -17,6 +17,7 @@ expression
     | expression EQ expression                     # EqualityExpr
     | expression OR expression                     # LogicalOrExpr
     | expression QMARK expression COLON expression # TernaryExpr
+    | LPAREN expression RPAREN                     # ParenthesizedExpr
     | accessor                                     # AccessorExpr
     | STRING_LITERAL                               # StringLiteralExpr
     ;
