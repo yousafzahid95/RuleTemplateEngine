@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using RuleTemplateEngine.Dtos;
 using RuleTemplateEngine.Events;
 using RuleTemplateEngine.Helpers;
 using RuleTemplateEngine.Interfaces;

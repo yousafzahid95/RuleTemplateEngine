@@ -15,17 +15,12 @@ namespace RuleTemplateEngine.ANTLRParamPOC
             _context = context;
         }
 
-        //WPTASK_{Event.Id ?? Event.WorkareaId}_{Event.WorkAreaId}
-
-       
-
-        // Concatenates all parts into final string
         public override object? VisitTemplate(RuleTemplateParser.TemplateContext ctx)
         {
             var sb = new StringBuilder();
             foreach (var part in ctx.templatePart())
                 sb.Append(Visit(part));
-            return sb.ToString();   //WPTASK_{RESOLVED GUID}_{RESOLVED GUID}
+            return sb.ToString();
         }
 
         // Plain text → return as-is
